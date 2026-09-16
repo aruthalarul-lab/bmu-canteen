@@ -10,7 +10,7 @@ import UpiModal from '../components/UpiModal';
 import socket from '../services/socket';
 
 export default function CustomerMenu({ 
-  cart, 
+  cart: rawCart, 
   addToCart, 
   removeFromCart, 
   updateQuantity, 
@@ -20,6 +20,7 @@ export default function CustomerMenu({
   activeOrder,
   setActiveOrder
 }) {
+  const cart = Array.isArray(rawCart) ? rawCart : [];
   const [categories, setCategories] = useState([]);
   const [items, setItems] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('ALL');
@@ -115,6 +116,8 @@ export default function CustomerMenu({
       dietFilter === 'ALL' ? true :
       dietFilter === 'VEG' ? item.is_veg === 1 :
       item.is_veg === 0;
+    const q = (searchQuery || '').toLowerCase().trim();
+    const matchesSearch = !q || (item.name || '').toLowerCase().includes(q) || ((item.description || '').toLowerCase().includes(q));
     return matchesCategory && matchesSearch && matchesDiet;
   });
 
