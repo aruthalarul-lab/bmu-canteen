@@ -98,12 +98,17 @@ export default function CustomerMenu({
     };
   }, [activeOrder]);
 
+  const safeCart = Array.isArray(cart) ? cart : [];
+  const safeItems = Array.isArray(items) ? items : [];
+  const safeCategories = Array.isArray(categories) ? categories : [];
+
   // Compute Cart Totals
-  const cartSubtotal = cart.reduce((sum, i) => sum + (i.price * i.quantity), 0);
-  const cartItemCount = cart.reduce((sum, i) => sum + i.quantity, 0);
+  const cartSubtotal = safeCart.reduce((sum, i) => sum + ((i.price || 0) * (i.quantity || 1)), 0);
+  const cartItemCount = safeCart.reduce((sum, i) => sum + (i.quantity || 1), 0);
 
   // Filter items
-  const filteredItems = items.filter(item => {
+  const filteredItems = safeItems.filter(item => {
+    if (!item) return false;
     const matchesCategory = selectedCategory === 'ALL' || String(item.category_id) === String(selectedCategory);
     const matchesDiet = 
       dietFilter === 'ALL' ? true :

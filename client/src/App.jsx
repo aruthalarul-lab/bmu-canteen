@@ -21,7 +21,8 @@ export default function App() {
   const [cart, setCart] = useState(() => {
     try {
       const saved = localStorage.getItem('bmu_canteen_cart');
-      return saved ? JSON.parse(saved) : [];
+      const parsed = saved ? JSON.parse(saved) : [];
+      return Array.isArray(parsed) ? parsed : [];
     } catch {
       return [];
     }
@@ -33,7 +34,8 @@ export default function App() {
   const [activeOrder, setActiveOrder] = useState(() => {
     try {
       const saved = localStorage.getItem('bmu_active_order');
-      return saved ? JSON.parse(saved) : null;
+      const parsed = saved ? JSON.parse(saved) : null;
+      return (parsed && typeof parsed === 'object' && parsed.id) ? parsed : null;
     } catch {
       return null;
     }
