@@ -84,6 +84,17 @@ app.post('/api/settings', (req, res) => {
   res.json(newSettings);
 });
 
+// POST /api/operator/verify-pin - Secure Operator Console Access
+app.post('/api/operator/verify-pin', (req, res) => {
+  const { pin } = req.body;
+  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get('operator_pin');
+  const storedPin = row ? row.value : '1234';
+  if (pin && String(pin).trim() === String(storedPin).trim()) {
+    return res.json({ success: true, message: 'Operator authenticated' });
+  }
+  return res.status(401).json({ error: 'Incorrect PIN. Default is 1234.' });
+});
+
 // GET /api/menu - Categories and Menu Items
 app.get('/api/menu', (req, res) => {
   const categories = db.prepare('SELECT * FROM categories ORDER BY display_order ASC, name ASC').all();
@@ -225,6 +236,7 @@ app.get('/api/orders/stats', (req, res) => {
       COALESCE(SUM(CASE WHEN status != 'CANCELLED' THEN total_amount ELSE 0 END), 0) as total_sales,
       COALESCE(SUM(CASE WHEN payment_method = 'CASH' AND status != 'CANCELLED' THEN total_amount ELSE 0 END), 0) as cash_sales,
       COALESCE(SUM(CASE WHEN payment_method = 'UPI' AND status != 'CANCELLED' THEN total_amount ELSE 0 END), 0) as upi_sales,
+      COALESCE(SUM(CASE WHEN payment_method = 'CREDIT' AND status != 'CANCELLED' THEN total_amount ELSE 0 END), 0) as credit_sales,
       COUNT(CASE WHEN status = 'PENDING' THEN 1 END) as pending_count,
       COUNT(CASE WHEN status = 'PREPARING' THEN 1 END) as preparing_count,
       COUNT(CASE WHEN status = 'READY' THEN 1 END) as ready_count,
@@ -283,9 +295,9 @@ app.post('/api/orders', async (req, res) => {
     }
 
     const tokenNo = getNextTokenNumber();
-    const finalPaymentMethod = payment_method === 'CASH' ? 'CASH' : 'UPI';
-    // For counter POS orders, payment can be marked PAID directly if cashier took cash/UPI
-    const paymentStatus = (order_type === 'COUNTER' || req.body.payment_status === 'PAID') ? 'PAID' : 'PENDING';
+    const finalPaymentMethod = payment_method === 'CASH' ? 'CASH' : payment_method === 'CREDIT' ? 'CREDIT' : 'UPI';
+    // For counter POS orders, payment can be marked PAID directly if cashier took cash/UPI; credit is always PENDING
+    const paymentStatus = (finalPaymentMethod === 'CREDIT') ? 'PENDING' : ((order_type === 'COUNTER' || req.body.payment_status === 'PAID') ? 'PAID' : 'PENDING');
     const finalOrderType = order_type === 'COUNTER' ? 'COUNTER' : 'ONLINE';
     const customerName = (customer_name && customer_name.trim()) || `Guest #${tokenNo}`;
 
@@ -314,11 +326,34 @@ app.post('/api/orders', async (req, res) => {
         itemInsert.run(orderId, vi.menu_item_id, vi.item_name, vi.price, vi.quantity, vi.total_price);
       }
 
+      // If placed on Credit / Khata, automatically update customer credit account
+      if (finalPaymentMethod === 'CREDIT') {
+        const existingAcc = db.prepare('SELECT * FROM credit_accounts WHERE LOWER(customer_name) = LOWER(?)').get(customerName);
+        if (existingAcc) {
+          db.prepare(`
+            UPDATE credit_accounts 
+            SET balance = balance + ?, 
+                desk = CASE WHEN ? != '' THEN ? ELSE desk END,
+                updated_at = CURRENT_TIMESTAMP 
+            WHERE id = ?
+          `).run(calculatedTotal, customer_desk || '', customer_desk || '', existingAcc.id);
+        } else {
+          db.prepare(`
+            INSERT INTO credit_accounts (customer_name, desk, balance) 
+            VALUES (?, ?, ?)
+          `).run(customerName, customer_desk || '', calculatedTotal);
+        }
+      }
+
       return orderId;
     });
 
     const orderId = createOrderTransaction();
     const createdOrder = getOrderWithItems(orderId);
+
+    if (finalPaymentMethod === 'CREDIT') {
+      io.emit('credit-updated', { customer_name: customerName });
+    }
 
     // Generate UPI QR if payment is UPI
     let upiData = null;
@@ -384,6 +419,151 @@ app.patch('/api/orders/:id/status', (req, res) => {
   io.emit('order-status-changed', updatedOrder);
 
   res.json(updatedOrder);
+});
+
+// ---------------- KHATA / CREDIT LEDGER API ROUTES ----------------
+
+// GET /api/credit/accounts - List all customer credit ledger accounts
+app.get('/api/credit/accounts', (req, res) => {
+  const accounts = db.prepare(`
+    SELECT 
+      ca.*,
+      (SELECT COUNT(*) FROM orders o WHERE LOWER(o.customer_name) = LOWER(ca.customer_name) AND o.payment_method = 'CREDIT' AND o.payment_status = 'PENDING') as unpaid_orders_count,
+      (SELECT MAX(created_at) FROM orders o WHERE LOWER(o.customer_name) = LOWER(ca.customer_name) AND o.payment_method = 'CREDIT') as last_order_date
+    FROM credit_accounts ca
+    ORDER BY ca.balance DESC, ca.customer_name ASC
+  `).all();
+  res.json(accounts);
+});
+
+// POST /api/credit/accounts - Add or update a customer credit profile
+app.post('/api/credit/accounts', (req, res) => {
+  const { customer_name, phone, desk, notes } = req.body;
+  if (!customer_name || !customer_name.trim()) {
+    return res.status(400).json({ error: 'Customer name is required' });
+  }
+  const cleanName = customer_name.trim();
+  const existing = db.prepare('SELECT * FROM credit_accounts WHERE LOWER(customer_name) = LOWER(?)').get(cleanName);
+  if (existing) {
+    db.prepare(`
+      UPDATE credit_accounts 
+      SET phone = ?, desk = ?, notes = ?, updated_at = CURRENT_TIMESTAMP 
+      WHERE id = ?
+    `).run(phone || '', desk || '', notes || '', existing.id);
+    const updated = db.prepare('SELECT * FROM credit_accounts WHERE id = ?').get(existing.id);
+    io.emit('credit-updated', { customer_name: cleanName });
+    return res.json(updated);
+  }
+
+  const result = db.prepare(`
+    INSERT INTO credit_accounts (customer_name, phone, desk, notes, balance) 
+    VALUES (?, ?, ?, ?, 0)
+  `).run(cleanName, phone || '', desk || '', notes || '');
+  const created = db.prepare('SELECT * FROM credit_accounts WHERE id = ?').get(result.lastInsertRowid);
+  io.emit('credit-updated', { customer_name: cleanName });
+  res.status(201).json(created);
+});
+
+// GET /api/credit/accounts/:name - Get individual ledger & order breakdown
+app.get('/api/credit/accounts/:name', (req, res) => {
+  const name = decodeURIComponent(req.params.name).trim();
+  const account = db.prepare('SELECT * FROM credit_accounts WHERE LOWER(customer_name) = LOWER(?)').get(name);
+  if (!account) {
+    return res.status(404).json({ error: 'Account not found' });
+  }
+
+  // Fetch all orders placed on credit by this customer
+  const orders = db.prepare(`
+    SELECT * FROM orders 
+    WHERE LOWER(customer_name) = LOWER(?) AND payment_method = 'CREDIT'
+    ORDER BY id DESC
+  `).all(name);
+
+  const getItems = db.prepare('SELECT * FROM order_items WHERE order_id = ?');
+  const enrichedOrders = orders.map(o => ({
+    ...o,
+    items: getItems.all(o.id)
+  }));
+
+  // Fetch settlements history
+  const settlements = db.prepare(`
+    SELECT * FROM credit_settlements 
+    WHERE LOWER(customer_name) = LOWER(?)
+    ORDER BY id DESC
+  `).all(name);
+
+  res.json({
+    account,
+    orders: enrichedOrders,
+    settlements
+  });
+});
+
+// POST /api/credit/settle - Settle/pay credit balance
+app.post('/api/credit/settle', (req, res) => {
+  const { customer_name, amount, payment_method, notes } = req.body;
+  const settleAmount = parseFloat(amount);
+  if (!customer_name || isNaN(settleAmount) || settleAmount <= 0) {
+    return res.status(400).json({ error: 'Valid customer name and amount are required' });
+  }
+  const cleanName = customer_name.trim();
+  const account = db.prepare('SELECT * FROM credit_accounts WHERE LOWER(customer_name) = LOWER(?)').get(cleanName);
+  if (!account) {
+    return res.status(404).json({ error: 'Customer credit account not found' });
+  }
+
+  const finalMethod = payment_method === 'UPI' ? 'UPI' : 'CASH';
+
+  const settleTx = db.transaction(() => {
+    db.prepare(`
+      INSERT INTO credit_settlements (customer_name, amount_paid, payment_method, notes)
+      VALUES (?, ?, ?, ?)
+    `).run(account.customer_name, settleAmount, finalMethod, notes || '');
+
+    const newBalance = Math.max(0, account.balance - settleAmount);
+    db.prepare(`
+      UPDATE credit_accounts 
+      SET balance = ?, updated_at = CURRENT_TIMESTAMP 
+      WHERE id = ?
+    `).run(newBalance, account.id);
+
+    // If fully cleared or settled, mark pending credit orders as PAID
+    if (newBalance === 0) {
+      db.prepare(`
+        UPDATE orders 
+        SET payment_status = 'PAID', updated_at = CURRENT_TIMESTAMP 
+        WHERE LOWER(customer_name) = LOWER(?) AND payment_method = 'CREDIT' AND payment_status = 'PENDING'
+      `).run(account.customer_name);
+    }
+
+    return newBalance;
+  });
+
+  const newBalance = settleTx();
+  io.emit('credit-updated', { customer_name: account.customer_name, balance: newBalance });
+  res.json({ success: true, customer_name: account.customer_name, new_balance: newBalance });
+});
+
+// GET /api/credit/stats - Summary metrics for Khata
+app.get('/api/credit/stats', (req, res) => {
+  const totalDue = db.prepare('SELECT COALESCE(SUM(balance), 0) as total_due FROM credit_accounts WHERE balance > 0').get().total_due;
+  const activeDebtors = db.prepare('SELECT COUNT(*) as count FROM credit_accounts WHERE balance > 0').get().count;
+  const settledWeek = db.prepare(`
+    SELECT COALESCE(SUM(amount_paid), 0) as total 
+    FROM credit_settlements 
+    WHERE date(settled_at, 'localtime') >= date('now', 'localtime', '-7 days')
+  `).get().total;
+  const recentSettlements = db.prepare(`
+    SELECT * FROM credit_settlements 
+    ORDER BY id DESC LIMIT 15
+  `).all();
+
+  res.json({
+    total_due: totalDue,
+    active_debtors: activeDebtors,
+    settled_week: settledWeek,
+    recent_settlements: recentSettlements
+  });
 });
 
 // WebSocket Connection Events

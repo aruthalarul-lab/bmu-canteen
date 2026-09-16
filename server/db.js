@@ -60,6 +60,26 @@ function initDb() {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS credit_accounts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer_name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+      phone TEXT DEFAULT '',
+      desk TEXT DEFAULT '',
+      notes TEXT DEFAULT '',
+      balance REAL DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS credit_settlements (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer_name TEXT NOT NULL,
+      amount_paid REAL NOT NULL,
+      payment_method TEXT NOT NULL, -- 'CASH' or 'UPI'
+      notes TEXT DEFAULT '',
+      settled_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
   // Initialize default settings if missing
@@ -69,6 +89,7 @@ function initDb() {
   insertSetting.run('upi_name', 'BMU Office Canteen');
   insertSetting.run('is_open', '1');
   insertSetting.run('token_prefix', '');
+  insertSetting.run('operator_pin', '1234');
 
   // Seed categories if empty
   const catCount = db.prepare('SELECT COUNT(*) as count FROM categories').get();

@@ -3,7 +3,8 @@ import {
   Bell, Volume2, VolumeX, CheckCircle, Clock, ChefHat, 
   Package, DollarSign, QrCode, RefreshCw, AlertTriangle, 
   Trash2, Plus, Minus, ArrowRight, Settings, Check, X, ShieldAlert,
-  Flame, Sparkles, TrendingUp, CreditCard, Edit2, Search
+  Flame, Sparkles, TrendingUp, CreditCard, Edit2, Search,
+  Lock, Unlock, BookOpen, FileText, Users
 } from 'lucide-react';
 import { playNewOrderSound, playOrderReadySound } from '../utils/audio';
 import socket from '../services/socket';
@@ -30,8 +31,37 @@ export default function OperatorConsole() {
     canteen_name: 'BMU Canteen',
     upi_id: 'bmucanteen@upi',
     upi_name: 'BMU Office Canteen',
+    operator_pin: '1234',
   });
   const [settingsSaving, setSettingsSaving] = useState(false);
+
+  // Operator Security PIN State
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return sessionStorage.getItem('bmu_operator_auth') === 'true';
+  });
+  const [pinInput, setPinInput] = useState('');
+  const [pinError, setPinError] = useState('');
+  const [verifyingPin, setVerifyingPin] = useState(false);
+
+  // Credit / Khata Ledger State
+  const [creditAccounts, setCreditAccounts] = useState([]);
+  const [creditStats, setCreditStats] = useState({ total_due: 0, active_debtors: 0, settled_week: 0 });
+  const [creditSearch, setCreditSearch] = useState('');
+  const [selectedLedger, setSelectedLedger] = useState(null);
+  const [ledgerDetail, setLedgerDetail] = useState(null);
+  const [loadingLedger, setLoadingLedger] = useState(false);
+
+  // Settlement Modal State
+  const [showSettleModal, setShowSettleModal] = useState(null);
+  const [settleAmount, setSettleAmount] = useState('');
+  const [settleMethod, setSettleMethod] = useState('CASH');
+  const [settleNotes, setSettleNotes] = useState('');
+  const [settling, setSettling] = useState(false);
+
+  // Add Customer Modal State
+  const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
+  const [newCustomer, setNewCustomer] = useState({ customer_name: '', phone: '', desk: '', notes: '' });
+  const [addingCustomer, setAddingCustomer] = useState(false);
 
   // Add Item Modal State
   const [showAddItemModal, setShowAddItemModal] = useState(false);
@@ -161,14 +191,145 @@ export default function OperatorConsole() {
     }
   };
 
+  // PIN Verification & Lock Actions
+  const handleVerifyPin = async (e) => {
+    if (e) e.preventDefault();
+    if (!pinInput.trim()) return;
+    setVerifyingPin(true);
+    setPinError('');
+    try {
+      const res = await fetch('/api/operator/verify-pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: pinInput.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        sessionStorage.setItem('bmu_operator_auth', 'true');
+        setIsAuthenticated(true);
+        setPinInput('');
+      } else {
+        setPinError(data.error || 'Incorrect PIN. Try 1234');
+        setPinInput('');
+      }
+    } catch (err) {
+      setPinError('Connection error verifying PIN');
+    } finally {
+      setVerifyingPin(false);
+    }
+  };
+
+  const handleLockConsole = () => {
+    sessionStorage.removeItem('bmu_operator_auth');
+    setIsAuthenticated(false);
+    setPinInput('');
+  };
+
+  // Khata / Credit Ledger Actions
+  const loadCreditData = async () => {
+    try {
+      const [accRes, statsRes] = await Promise.all([
+        fetch('/api/credit/accounts'),
+        fetch('/api/credit/stats'),
+      ]);
+      if (accRes.ok) setCreditAccounts(await accRes.json());
+      if (statsRes.ok) setCreditStats(await statsRes.json());
+    } catch (err) {
+      console.error('Failed to load credit data:', err);
+    }
+  };
+
+  const viewCustomerLedger = async (customerName) => {
+    setSelectedLedger(customerName);
+    setLoadingLedger(true);
+    try {
+      const res = await fetch(`/api/credit/accounts/${encodeURIComponent(customerName)}`);
+      if (res.ok) {
+        setLedgerDetail(await res.json());
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingLedger(false);
+    }
+  };
+
+  const handleSettleSubmit = async (e) => {
+    e.preventDefault();
+    if (!showSettleModal || !settleAmount || parseFloat(settleAmount) <= 0) {
+      alert('Please enter a valid amount');
+      return;
+    }
+    setSettling(true);
+    try {
+      const res = await fetch('/api/credit/settle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customer_name: showSettleModal.customer_name,
+          amount: parseFloat(settleAmount),
+          payment_method: settleMethod,
+          notes: settleNotes,
+        })
+      });
+      if (res.ok) {
+        await loadCreditData();
+        if (selectedLedger === showSettleModal.customer_name) {
+          viewCustomerLedger(showSettleModal.customer_name);
+        }
+        setShowSettleModal(null);
+        setSettleAmount('');
+        setSettleNotes('');
+        alert(`Payment of ₹${settleAmount} recorded successfully!`);
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Failed to record settlement');
+      }
+    } catch (err) {
+      alert('Error recording settlement');
+    } finally {
+      setSettling(false);
+    }
+  };
+
+  const handleAddCustomer = async (e) => {
+    e.preventDefault();
+    if (!newCustomer.customer_name.trim()) {
+      alert('Please enter Employee / Customer Name');
+      return;
+    }
+    setAddingCustomer(true);
+    try {
+      const res = await fetch('/api/credit/accounts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newCustomer)
+      });
+      if (res.ok) {
+        await loadCreditData();
+        setShowAddCustomerModal(false);
+        setNewCustomer({ customer_name: '', phone: '', desk: '', notes: '' });
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Failed to add customer');
+      }
+    } catch (err) {
+      alert('Error adding customer');
+    } finally {
+      setAddingCustomer(false);
+    }
+  };
+
   // Load Initial Data
   const loadData = async () => {
     try {
-      const [ordersRes, statsRes, menuRes, settingsRes] = await Promise.all([
+      const [ordersRes, statsRes, menuRes, settingsRes, creditAccRes, creditStatsRes] = await Promise.all([
         fetch('/api/orders/active'),
         fetch('/api/orders/stats'),
         fetch('/api/menu'),
         fetch('/api/settings'),
+        fetch('/api/credit/accounts'),
+        fetch('/api/credit/stats'),
       ]);
 
       if (ordersRes.ok) setOrders(await ordersRes.json());
@@ -179,6 +340,8 @@ export default function OperatorConsole() {
         setCategories(menuData.categories || []);
       }
       if (settingsRes.ok) setSettings(await settingsRes.json());
+      if (creditAccRes.ok) setCreditAccounts(await creditAccRes.json());
+      if (creditStatsRes.ok) setCreditStats(await creditStatsRes.json());
     } catch (err) {
       console.error('Failed to load operator data:', err);
     } finally {
@@ -240,12 +403,14 @@ export default function OperatorConsole() {
     socket.on('order-status-changed', handleStatusChanged);
     socket.on('stock-updated', handleStockUpdated);
     socket.on('menu-changed', handleMenuChanged);
+    socket.on('credit-updated', loadCreditData);
 
     return () => {
       socket.off('new-order', handleNewOrder);
       socket.off('order-status-changed', handleStatusChanged);
       socket.off('stock-updated', handleStockUpdated);
       socket.off('menu-changed', handleMenuChanged);
+      socket.off('credit-updated', loadCreditData);
     };
   }, [audioEnabled]);
 
@@ -315,17 +480,18 @@ export default function OperatorConsole() {
 
   const posTotal = posCart.reduce((sum, i) => sum + (i.price * i.quantity), 0);
 
-  // Fast-POS 2-Tap Checkout (Cash or UPI)
-  const submitPosOrder = async (payMethod) => {
+  // Fast-POS Checkout (Cash, UPI, or Khata Credit)
+  const submitPosOrder = async (payMethod, overrideName) => {
     if (posCart.length === 0) return;
     setPosSubmitting(true);
 
     try {
+      const finalName = overrideName || posCustomerName.trim() || (payMethod === 'CREDIT' ? 'Credit Staff' : 'Counter Walk-in');
       const payload = {
-        customer_name: posCustomerName.trim() || 'Counter Walk-in',
+        customer_name: finalName,
         payment_method: payMethod,
         order_type: 'COUNTER',
-        payment_status: 'PAID', // In-person walk-ins are marked paid upon billing
+        payment_status: payMethod === 'CREDIT' ? 'PENDING' : 'PAID',
         items: posCart.map(item => ({
           menu_item_id: item.id,
           quantity: item.quantity,
@@ -348,6 +514,10 @@ export default function OperatorConsole() {
       setPosLastPlacedToken(orderData.token_no);
       setPosCart([]);
       setPosCustomerName('');
+
+      if (payMethod === 'CREDIT') {
+        loadCreditData();
+      }
 
       // Auto clear banner after 4 seconds
       setTimeout(() => setPosLastPlacedToken(null), 4000);
@@ -384,6 +554,101 @@ export default function OperatorConsole() {
   const preparingOrders = orders.filter(o => o.status === 'PREPARING');
   const readyOrders = orders.filter(o => o.status === 'READY');
 
+  // If not authenticated, show Operator PIN Gate
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center p-4 bg-slate-900 text-white">
+        <div className="bg-slate-800 w-full max-w-sm rounded-3xl p-6 sm:p-8 border border-slate-700 shadow-2xl space-y-6 text-center animate-fade-in">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-orange-600 to-amber-500 flex items-center justify-center mx-auto shadow-lg shadow-orange-500/30">
+            <Lock className="w-8 h-8 text-white" />
+          </div>
+
+          <div>
+            <h2 className="text-xl font-extrabold tracking-tight">Staff Only Console</h2>
+            <p className="text-xs text-slate-400 mt-1">
+              Enter 4-digit security PIN to access kitchen dispatch & cashier POS.
+            </p>
+          </div>
+
+          <form onSubmit={handleVerifyPin} className="space-y-4">
+            <div className="flex justify-center">
+              <input
+                type="password"
+                maxLength={4}
+                autoFocus
+                placeholder="••••"
+                value={pinInput}
+                onChange={(e) => setPinInput(e.target.value)}
+                className="w-44 text-center tracking-[0.6em] text-3xl font-black py-3 rounded-2xl bg-slate-900 border border-slate-600 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+            </div>
+
+            {pinError && (
+              <p className="text-xs font-semibold text-rose-400 bg-rose-950/50 py-1.5 px-3 rounded-xl border border-rose-800/50">
+                {pinError}
+              </p>
+            )}
+
+            {/* Quick 10-Key Pad for Touchscreens */}
+            <div className="grid grid-cols-3 gap-2 pt-1 max-w-[240px] mx-auto">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+                <button
+                  key={num}
+                  type="button"
+                  onClick={() => pinInput.length < 4 && setPinInput(prev => prev + num)}
+                  className="py-3 rounded-xl bg-slate-700 hover:bg-slate-600 active:scale-95 font-bold text-lg text-white transition-all shadow-sm"
+                >
+                  {num}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setPinInput('')}
+                className="py-3 rounded-xl bg-slate-700/60 hover:bg-slate-700 text-slate-400 font-bold text-xs transition-all"
+              >
+                Clear
+              </button>
+              <button
+                type="button"
+                onClick={() => pinInput.length < 4 && setPinInput(prev => prev + '0')}
+                className="py-3 rounded-xl bg-slate-700 hover:bg-slate-600 active:scale-95 font-bold text-lg text-white transition-all shadow-sm"
+              >
+                0
+              </button>
+              <button
+                type="button"
+                onClick={() => setPinInput(prev => prev.slice(0, -1))}
+                className="py-3 rounded-xl bg-slate-700/60 hover:bg-slate-700 text-slate-400 font-bold text-xs transition-all"
+              >
+                ⌫
+              </button>
+            </div>
+
+            <button
+              type="submit"
+              disabled={verifyingPin || pinInput.length === 0}
+              className="w-full py-3.5 rounded-2xl bg-orange-500 hover:bg-orange-600 active:scale-95 disabled:opacity-50 text-white font-extrabold text-sm shadow-lg shadow-orange-500/25 transition-all"
+            >
+              {verifyingPin ? 'Verifying...' : 'Unlock Operator Console'}
+            </button>
+          </form>
+
+          <div className="pt-2 border-t border-slate-700/60">
+            <p className="text-[11px] text-slate-400">
+              Default PIN is <span className="text-orange-400 font-mono font-bold">1234</span> (Change in Settings)
+            </p>
+            <button
+              onClick={() => window.location.href = '/'}
+              className="mt-2 text-xs text-slate-400 hover:text-white transition-colors"
+            >
+              ← Back to Customer Menu
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-slate-100 p-3 sm:p-6 text-slate-900">
       <div className="max-w-7xl mx-auto space-y-4">
@@ -400,15 +665,21 @@ export default function OperatorConsole() {
             </div>
             <div className="h-8 w-[1px] bg-slate-200 hidden sm:block"></div>
             <div>
-              <span className="text-slate-400 block font-medium">💵 Cash Sales</span>
+              <span className="text-slate-400 block font-medium">💵 Cash</span>
               <span className="text-base sm:text-lg font-bold text-emerald-600">
                 ₹{stats?.cash_sales || 0}
               </span>
             </div>
             <div>
-              <span className="text-slate-400 block font-medium">⚡ UPI Sales</span>
+              <span className="text-slate-400 block font-medium">⚡ UPI</span>
               <span className="text-base sm:text-lg font-bold text-orange-600">
                 ₹{stats?.upi_sales || 0}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-400 block font-medium">📋 Weekly Khata Due</span>
+              <span className="text-base sm:text-lg font-bold text-indigo-600">
+                ₹{creditStats?.total_due || 0}
               </span>
             </div>
             <div className="h-8 w-[1px] bg-slate-200 hidden sm:block"></div>
@@ -420,7 +691,7 @@ export default function OperatorConsole() {
             </div>
           </div>
 
-          {/* Audio Chime Controls */}
+          {/* Audio Chime & Console Lock Controls */}
           <div className="flex items-center space-x-2">
             <button
               onClick={() => {
@@ -445,15 +716,24 @@ export default function OperatorConsole() {
               {audioEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
               <span className="hidden sm:inline">{audioEnabled ? 'Sound ON' : 'Muted'}</span>
             </button>
+
+            <button
+              onClick={handleLockConsole}
+              className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-700 font-semibold text-xs border border-slate-200 flex items-center space-x-1.5 transition-colors"
+              title="Lock Console (Staff Logout)"
+            >
+              <Lock className="w-3.5 h-3.5" />
+              <span>Lock</span>
+            </button>
           </div>
         </div>
 
         {/* Tab Controls Bar */}
-        <div className="flex items-center justify-between bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm">
-          <div className="flex items-center space-x-1.5 w-full sm:w-auto">
+        <div className="flex items-center justify-between bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
+          <div className="flex items-center space-x-1.5 min-w-max">
             <button
               onClick={() => setTab('queue')}
-              className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center space-x-2 transition-all ${
+              className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center space-x-2 transition-all ${
                 tab === 'queue'
                   ? 'bg-slate-900 text-white shadow-md'
                   : 'text-slate-600 hover:bg-slate-100'
@@ -470,7 +750,7 @@ export default function OperatorConsole() {
 
             <button
               onClick={() => setTab('pos')}
-              className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center space-x-2 transition-all ${
+              className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center space-x-2 transition-all ${
                 tab === 'pos'
                   ? 'bg-orange-500 text-white shadow-md'
                   : 'text-slate-600 hover:bg-slate-100'
@@ -482,14 +762,31 @@ export default function OperatorConsole() {
 
             <button
               onClick={() => setTab('stock')}
-              className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center space-x-2 transition-all ${
+              className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center space-x-2 transition-all ${
                 tab === 'stock'
                   ? 'bg-slate-900 text-white shadow-md'
                   : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
               <Package className="w-4 h-4" />
-              <span>1-Tap Stock</span>
+              <span>Menu & Stock</span>
+            </button>
+
+            <button
+              onClick={() => setTab('credit')}
+              className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center space-x-2 transition-all ${
+                tab === 'credit'
+                  ? 'bg-indigo-600 text-white shadow-md'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <BookOpen className="w-4 h-4" />
+              <span>Weekly Khata</span>
+              {creditStats.total_due > 0 && (
+                <span className="px-1.5 py-0.5 rounded-full text-[10px] font-black bg-rose-500 text-white">
+                  ₹{creditStats.total_due}
+                </span>
+              )}
             </button>
 
             <button
@@ -499,7 +796,7 @@ export default function OperatorConsole() {
                   ? 'bg-slate-900 text-white shadow-md'
                   : 'text-slate-600 hover:bg-slate-100'
               }`}
-              title="Settings & UPI"
+              title="Settings & PIN"
             >
               <Settings className="w-4 h-4" />
             </button>
@@ -507,7 +804,7 @@ export default function OperatorConsole() {
 
           <button
             onClick={loadData}
-            className="p-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
+            className="p-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors shrink-0 ml-2"
             title="Refresh All Data"
           >
             <RefreshCw className="w-4 h-4" />
@@ -898,12 +1195,12 @@ export default function OperatorConsole() {
                   <span className="text-2xl font-black">₹{posTotal}</span>
                 </div>
 
-                {/* 2-Tap Payment Buttons */}
-                <div className="grid grid-cols-2 gap-2">
+                {/* 3-Tap Payment Buttons */}
+                <div className="grid grid-cols-3 gap-2">
                   <button
                     disabled={posCart.length === 0 || posSubmitting}
                     onClick={() => submitPosOrder('CASH')}
-                    className="py-3 px-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 disabled:opacity-50 text-white font-black text-xs shadow-md shadow-emerald-600/20 transition-all flex flex-col items-center justify-center"
+                    className="py-3 px-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 disabled:opacity-50 text-white font-black text-xs shadow-md shadow-emerald-600/20 transition-all flex flex-col items-center justify-center"
                   >
                     <span>💵 CASH</span>
                     <span className="text-[10px] font-normal opacity-90">Collect ₹{posTotal}</span>
@@ -912,10 +1209,27 @@ export default function OperatorConsole() {
                   <button
                     disabled={posCart.length === 0 || posSubmitting}
                     onClick={() => submitPosOrder('UPI')}
-                    className="py-3 px-3 rounded-2xl bg-orange-500 hover:bg-orange-600 active:scale-95 disabled:opacity-50 text-white font-black text-xs shadow-md shadow-orange-500/20 transition-all flex flex-col items-center justify-center"
+                    className="py-3 px-2 rounded-2xl bg-orange-500 hover:bg-orange-600 active:scale-95 disabled:opacity-50 text-white font-black text-xs shadow-md shadow-orange-500/20 transition-all flex flex-col items-center justify-center"
                   >
                     <span>⚡ UPI QR</span>
                     <span className="text-[10px] font-normal opacity-90">Paid ₹{posTotal}</span>
+                  </button>
+
+                  <button
+                    disabled={posCart.length === 0 || posSubmitting}
+                    onClick={() => {
+                      if (!posCustomerName.trim()) {
+                        const name = prompt('Enter Staff Member Name for Weekly Credit:');
+                        if (!name || !name.trim()) return;
+                        submitPosOrder('CREDIT', name.trim());
+                      } else {
+                        submitPosOrder('CREDIT', posCustomerName.trim());
+                      }
+                    }}
+                    className="py-3 px-2 rounded-2xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 disabled:opacity-50 text-white font-black text-xs shadow-md shadow-indigo-600/20 transition-all flex flex-col items-center justify-center"
+                  >
+                    <span>📋 KHATA</span>
+                    <span className="text-[10px] font-normal opacity-90">Weekly Tab</span>
                   </button>
                 </div>
               </div>
@@ -1071,20 +1385,218 @@ export default function OperatorConsole() {
           </div>
         )}
 
-        {/* ================= VIEW 4: SETTINGS & CLOSING ================= */}
+        {/* ================= VIEW 4: WEEKLY KHATA / CREDIT LEDGER ================= */}
+        {tab === 'credit' && (
+          <div className="space-y-4 animate-fade-in">
+            {/* Top Metric Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+              <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
+                    Total Credit Due
+                  </span>
+                  <span className="text-2xl sm:text-3xl font-black text-rose-600">
+                    ₹{creditStats.total_due || 0}
+                  </span>
+                  <span className="text-[11px] text-slate-400 block mt-0.5">
+                    Uncollected weekly dues
+                  </span>
+                </div>
+                <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shadow-inner">
+                  <DollarSign className="w-6 h-6" />
+                </div>
+              </div>
+
+              <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
+                    Staff With Dues
+                  </span>
+                  <span className="text-2xl sm:text-3xl font-black text-slate-900">
+                    {creditStats.active_debtors || 0}
+                  </span>
+                  <span className="text-[11px] text-slate-400 block mt-0.5">
+                    Accounts with active balance
+                  </span>
+                </div>
+                <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shadow-inner">
+                  <Users className="w-6 h-6" />
+                </div>
+              </div>
+
+              <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
+                    Settled Past 7 Days
+                  </span>
+                  <span className="text-2xl sm:text-3xl font-black text-emerald-600">
+                    ₹{creditStats.settled_week || 0}
+                  </span>
+                  <span className="text-[11px] text-slate-400 block mt-0.5">
+                    Total weekly collections
+                  </span>
+                </div>
+                <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shadow-inner">
+                  <CheckCircle className="w-6 h-6" />
+                </div>
+              </div>
+            </div>
+
+            {/* Account List & Filter Bar */}
+            <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-black text-slate-900 flex items-center space-x-2">
+                    <BookOpen className="w-5 h-5 text-indigo-600" />
+                    <span>Weekly Credit Accounts (Khata Ledger)</span>
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Track weekly canteen tabs by employee, view order items, and record payments.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowAddCustomerModal(true)}
+                  className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold text-xs shadow-md shadow-indigo-600/20 flex items-center space-x-1.5 transition-all self-start sm:self-auto"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Register Staff Member</span>
+                </button>
+              </div>
+
+              {/* Search Bar */}
+              <div className="relative">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search staff by name, desk, or phone..."
+                  value={creditSearch}
+                  onChange={(e) => setCreditSearch(e.target.value)}
+                  className="w-full pl-9 pr-8 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                />
+                {creditSearch && (
+                  <button 
+                    onClick={() => setCreditSearch('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
+              {/* Customer Cards Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pt-2">
+                {creditAccounts
+                  .filter(acc => {
+                    const q = creditSearch.toLowerCase().trim();
+                    return !q || (acc.customer_name || '').toLowerCase().includes(q) || (acc.desk || '').toLowerCase().includes(q) || (acc.phone || '').toLowerCase().includes(q);
+                  })
+                  .map(acc => {
+                    const hasDues = acc.balance > 0;
+                    return (
+                      <div
+                        key={acc.id}
+                        className={`p-4 rounded-2xl border transition-all flex flex-col justify-between space-y-3 ${
+                          hasDues 
+                            ? 'bg-white border-slate-200 hover:border-indigo-300 shadow-sm' 
+                            : 'bg-slate-50/60 border-slate-200 opacity-80'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <h3 className="font-extrabold text-slate-900 text-base">{acc.customer_name}</h3>
+                            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 mt-1">
+                              {acc.desk && <span className="bg-slate-100 px-2 py-0.5 rounded-md font-medium">📍 {acc.desk}</span>}
+                              {acc.phone && <span className="text-slate-400">📞 {acc.phone}</span>}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <span className={`text-xl font-black block ${hasDues ? 'text-rose-600' : 'text-emerald-600'}`}>
+                              ₹{acc.balance}
+                            </span>
+                            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                              hasDues ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'
+                            }`}>
+                              {hasDues ? `${acc.unpaid_orders_count || 0} Unpaid Orders` : 'All Cleared'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {acc.notes && (
+                          <p className="text-xs text-slate-500 bg-slate-50 p-2 rounded-xl border border-slate-100 italic">
+                            "{acc.notes}"
+                          </p>
+                        )}
+
+                        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+                          <button
+                            onClick={() => viewCustomerLedger(acc.customer_name)}
+                            className="py-2 px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+                          >
+                            <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                            <span>View Bill</span>
+                          </button>
+
+                          <button
+                            disabled={!hasDues}
+                            onClick={() => {
+                              setShowSettleModal(acc);
+                              setSettleAmount(String(acc.balance));
+                            }}
+                            className="py-2 px-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 disabled:opacity-40 disabled:pointer-events-none text-white text-xs font-bold shadow-sm transition-all flex items-center justify-center gap-1.5"
+                          >
+                            <CheckCircle className="w-3.5 h-3.5" />
+                            <span>Settle Bill</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+
+              {creditAccounts.length === 0 && (
+                <div className="text-center py-12 text-slate-400 space-y-2">
+                  <BookOpen className="w-10 h-10 mx-auto text-slate-300" />
+                  <p className="text-sm font-semibold text-slate-600">No Credit Accounts Registered Yet</p>
+                  <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                    Click "Register Staff Member" or bill an order via "Fast-POS ➔ KHATA" to start an employee's weekly tab.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ================= VIEW 5: SETTINGS & CLOSING ================= */}
         {tab === 'settings' && (
           <div className="max-w-2xl mx-auto bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6">
             <div>
               <h2 className="text-lg font-black text-slate-900 flex items-center space-x-2">
                 <Settings className="w-5 h-5 text-orange-500" />
-                <span>Canteen & UPI Configuration</span>
+                <span>Canteen & Security Configuration</span>
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Configure your UPI VPA to receive mobile order payments directly into your bank account.
+                Configure your UPI VPA to receive mobile order payments and set your Operator PIN.
               </p>
             </div>
 
             <form onSubmit={handleSaveSettings} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  Operator Security PIN (4 Digits) *
+                </label>
+                <input
+                  type="password"
+                  maxLength={4}
+                  placeholder="e.g. 1234"
+                  value={settings.operator_pin || ''}
+                  onChange={(e) => setSettings({ ...settings, operator_pin: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none font-mono"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Locks the Operator Console from customers. Default PIN is 1234.
+                </p>
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
                   Canteen Name
@@ -1495,7 +2007,375 @@ export default function OperatorConsole() {
           </div>
         )}
 
+        {/* Customer Ledger / History Modal */}
+        {selectedLedger && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+            <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden border border-slate-100 max-h-[90vh] flex flex-col">
+              <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-6 py-4 text-white flex items-center justify-between shrink-0">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 rounded-xl bg-orange-500/20 text-orange-400 flex items-center justify-center font-bold text-lg">
+                    {selectedLedger[0]?.toUpperCase()}
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-base tracking-tight">{selectedLedger}</h3>
+                    <p className="text-xs text-slate-300">Staff Credit & Weekly Khata Ledger</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => { setSelectedLedger(null); setLedgerDetail(null); }}
+                  className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-6 overflow-y-auto flex-1">
+                {loadingLedger ? (
+                  <div className="py-12 text-center text-slate-400">
+                    <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-orange-500" />
+                    <p className="text-sm font-medium">Loading ledger statement...</p>
+                  </div>
+                ) : ledgerDetail ? (
+                  <>
+                    {/* Summary Header */}
+                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex flex-wrap items-center justify-between gap-4">
+                      <div>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Outstanding Balance</p>
+                        <p className={`text-2xl font-black ${ledgerDetail.account.balance > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                          ₹{ledgerDetail.account.balance}
+                        </p>
+                        <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
+                          {ledgerDetail.account.desk && <span>📍 {ledgerDetail.account.desk}</span>}
+                          {ledgerDetail.account.phone && <span>📞 {ledgerDetail.account.phone}</span>}
+                        </div>
+                      </div>
+
+                      {ledgerDetail.account.balance > 0 && (
+                        <button
+                          onClick={() => {
+                            setShowSettleModal(ledgerDetail.account);
+                            setSettleAmount(String(ledgerDetail.account.balance));
+                          }}
+                          className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all flex items-center gap-1.5"
+                        >
+                          <CreditCard className="w-4 h-4" />
+                          <span>Settle Dues (₹{ledgerDetail.account.balance})</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Credit Orders Section */}
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                        <FileText className="w-4 h-4 text-orange-500" />
+                        Credit Orders ({ledgerDetail.orders.length})
+                      </h4>
+
+                      {ledgerDetail.orders.length === 0 ? (
+                        <p className="text-xs text-slate-400 italic py-2">No credit orders recorded yet.</p>
+                      ) : (
+                        <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                          {ledgerDetail.orders.map((o) => (
+                            <div key={o.id} className="p-3 bg-white rounded-xl border border-slate-200 flex items-center justify-between text-xs hover:border-slate-300 transition-colors">
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono font-bold text-slate-800">Token #{o.token_no}</span>
+                                  <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] ${
+                                    o.payment_status === 'PAID' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'
+                                  }`}>
+                                    {o.payment_status}
+                                  </span>
+                                </div>
+                                <p className="text-[11px] text-slate-500 mt-1">
+                                  {o.items?.map(it => `${it.quantity}x ${it.name}`).join(', ')}
+                                </p>
+                                <p className="text-[10px] text-slate-400 mt-0.5">
+                                  {new Date(o.created_at).toLocaleString()}
+                                </p>
+                              </div>
+                              <span className="font-bold text-slate-800 text-sm">
+                                ₹{o.total_amount}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Past Settlements History */}
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                        <CheckCircle className="w-4 h-4 text-emerald-600" />
+                        Past Payment Receipts ({ledgerDetail.settlements.length})
+                      </h4>
+
+                      {ledgerDetail.settlements.length === 0 ? (
+                        <p className="text-xs text-slate-400 italic py-2">No past payments settled yet.</p>
+                      ) : (
+                        <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                          {ledgerDetail.settlements.map((s) => (
+                            <div key={s.id} className="p-3 bg-emerald-50/50 rounded-xl border border-emerald-100 flex items-center justify-between text-xs">
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-emerald-900">Paid ₹{s.amount_paid}</span>
+                                  <span className="px-1.5 py-0.5 bg-emerald-200/60 text-emerald-800 rounded font-semibold text-[10px]">
+                                    {s.payment_method}
+                                  </span>
+                                </div>
+                                {s.notes && <p className="text-[11px] text-slate-600 mt-0.5">Note: {s.notes}</p>}
+                                <p className="text-[10px] text-slate-400 mt-0.5">
+                                  {new Date(s.settled_at).toLocaleString()}
+                                </p>
+                              </div>
+                              <Check className="w-4 h-4 text-emerald-600" />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                ) : null}
+              </div>
+
+              <div className="bg-slate-50 px-6 py-3 border-t border-slate-200 flex justify-end shrink-0">
+                <button
+                  onClick={() => { setSelectedLedger(null); setLedgerDetail(null); }}
+                  className="px-5 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs transition-colors"
+                >
+                  Close Statement
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Settle Bill Modal */}
+        {showSettleModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+            <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden border border-slate-100">
+              <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-4 text-white flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <CreditCard className="w-5 h-5" />
+                  <h3 className="font-bold text-base">Record Weekly Settlement</h3>
+                </div>
+                <button 
+                  onClick={() => setShowSettleModal(null)}
+                  className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSettleSubmit} className="p-6 space-y-4">
+                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
+                  <p className="text-xs text-slate-500 font-semibold">Staff Member</p>
+                  <p className="text-base font-extrabold text-slate-800">{showSettleModal.customer_name}</p>
+                  <p className="text-xs text-rose-600 font-bold mt-0.5">Current Dues: ₹{showSettleModal.balance}</p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    Amount Received (₹) *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    step="1"
+                    placeholder="e.g. 240"
+                    value={settleAmount}
+                    onChange={(e) => setSettleAmount(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-base font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  />
+                  <div className="flex gap-2 mt-2">
+                    <button
+                      type="button"
+                      onClick={() => setSettleAmount(String(showSettleModal.balance))}
+                      className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-[11px] font-bold text-slate-700 transition-colors"
+                    >
+                      Full Dues (₹{showSettleModal.balance})
+                    </button>
+                    {showSettleModal.balance > 100 && (
+                      <button
+                        type="button"
+                        onClick={() => setSettleAmount('100')}
+                        className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-[11px] font-bold text-slate-700 transition-colors"
+                      >
+                        ₹100
+                      </button>
+                    )}
+                    {showSettleModal.balance > 500 && (
+                      <button
+                        type="button"
+                        onClick={() => setSettleAmount('500')}
+                        className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-[11px] font-bold text-slate-700 transition-colors"
+                      >
+                        ₹500
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    Payment Mode Received
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSettleMethod('CASH')}
+                      className={`py-2.5 px-3 rounded-xl border font-bold text-xs transition-all ${
+                        settleMethod === 'CASH'
+                          ? 'bg-emerald-50 border-emerald-500 text-emerald-800 ring-2 ring-emerald-500/20 shadow-sm'
+                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      💵 Cash
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSettleMethod('UPI')}
+                      className={`py-2.5 px-3 rounded-xl border font-bold text-xs transition-all ${
+                        settleMethod === 'UPI'
+                          ? 'bg-indigo-50 border-indigo-500 text-indigo-800 ring-2 ring-indigo-500/20 shadow-sm'
+                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      📱 UPI / QR
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    Settlement Notes (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Week 3 payment settled in cash"
+                    value={settleNotes}
+                    onChange={(e) => setSettleNotes(e.target.value)}
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  />
+                </div>
+
+                <div className="pt-3 border-t border-slate-100 flex items-center justify-end space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowSettleModal(null)}
+                    className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-100 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={settling}
+                    className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all flex items-center gap-1.5"
+                  >
+                    {settling ? 'Recording...' : 'Confirm Receipt'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Add Staff Credit Profile Modal */}
+        {showAddCustomerModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+            <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden border border-slate-100">
+              <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-6 py-4 text-white flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <Users className="w-5 h-5 text-orange-400" />
+                  <h3 className="font-bold text-base">Add Staff Credit Profile</h3>
+                </div>
+                <button 
+                  onClick={() => setShowAddCustomerModal(false)}
+                  className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <form onSubmit={handleAddCustomer} className="p-6 space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    Employee / Customer Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Ramesh Kumar"
+                    value={newCustomer.customer_name}
+                    onChange={(e) => setNewCustomer({ ...newCustomer, customer_name: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                      Desk / Department
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Accounts 2F"
+                      value={newCustomer.desk}
+                      onChange={(e) => setNewCustomer({ ...newCustomer, desk: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                      Phone Number
+                    </label>
+                    <input
+                      type="tel"
+                      placeholder="e.g. 9876543210"
+                      value={newCustomer.phone}
+                      onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    Notes
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Clears tab every Friday afternoon"
+                    value={newCustomer.notes}
+                    onChange={(e) => setNewCustomer({ ...newCustomer, notes: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                  />
+                </div>
+
+                <div className="pt-3 border-t border-slate-100 flex items-center justify-end space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddCustomerModal(false)}
+                    className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-100 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={addingCustomer}
+                    className="px-5 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-bold text-xs shadow-md shadow-orange-500/20 transition-all flex items-center gap-1.5"
+                  >
+                    {addingCustomer ? 'Adding...' : 'Create Account'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   );
 }
+

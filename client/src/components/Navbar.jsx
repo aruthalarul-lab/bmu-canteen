@@ -36,19 +36,7 @@ export default function Navbar({ currentView, setView, cartCount, setIsCartOpen,
               }`}
             >
               <Utensils className="w-4 h-4" />
-              <span className="hidden sm:inline">Order Menu</span>
-            </button>
-
-            <button
-              onClick={() => setView('operator')}
-              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg transition-all ${
-                currentView === 'operator'
-                  ? 'bg-slate-900 text-white font-semibold shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-              }`}
-            >
-              <LayoutDashboard className="w-4 h-4 text-orange-400" />
-              <span>Operator POS</span>
+              <span>Menu</span>
             </button>
 
             <button
@@ -60,8 +48,25 @@ export default function Navbar({ currentView, setView, cartCount, setIsCartOpen,
               }`}
             >
               <Monitor className="w-4 h-4 text-emerald-400" />
-              <span className="hidden sm:inline">TV Display</span>
+              <span>TV Board</span>
             </button>
+
+            {/* If currently in Operator mode, show active badge; otherwise show discreet staff lock */}
+            {currentView === 'operator' ? (
+              <span className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-slate-900 text-white font-semibold shadow-sm">
+                <LayoutDashboard className="w-4 h-4 text-orange-400" />
+                <span>Operator POS</span>
+              </span>
+            ) : (
+              <button
+                onClick={() => setView('operator')}
+                className="p-1.5 px-2 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/50 transition-colors"
+                title="Staff Only Access"
+                aria-label="Staff Login"
+              >
+                <span className="text-[11px] font-medium text-slate-400 hover:text-slate-600">🔒 Staff</span>
+              </button>
+            )}
           </nav>
 
           {/* Cart Trigger (visible in Customer view) */}

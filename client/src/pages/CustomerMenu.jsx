@@ -513,6 +513,17 @@ export default function CustomerMenu({
             })}
           </div>
         )}
+
+        {/* Discreet Staff Portal Link */}
+        <div className="mt-16 text-center text-xs text-slate-400 border-t border-slate-200/60 pt-6 pb-6 space-y-1">
+          <p>© BMU Canteen • Fresh & Fast Office Dining</p>
+          <a
+            href="/?view=operator"
+            className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-slate-600 transition-colors mt-1"
+          >
+            <span>🔒 Staff & Canteen Operator Portal</span>
+          </a>
+        </div>
       </div>
 
       {/* Floating Bottom Cart Bar (for Mobile quick checkout) */}
@@ -653,18 +664,18 @@ export default function CustomerMenu({
                       <label className="text-xs font-semibold text-slate-700 block mb-1.5">
                         Payment Method
                       </label>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                         <button
                           type="button"
                           onClick={() => setPaymentMethod('UPI')}
                           className={`p-2.5 rounded-xl border text-xs font-bold flex flex-col items-center justify-center transition-all ${
                             paymentMethod === 'UPI'
-                              ? 'bg-orange-50 border-orange-400 text-orange-700 ring-1 ring-orange-400'
+                              ? 'bg-orange-50 border-orange-400 text-orange-700 ring-1 ring-orange-400 shadow-sm'
                               : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
                           }`}
                         >
-                          <span>⚡ UPI / QR Scan</span>
-                          <span className="text-[10px] font-normal text-slate-500 mt-0.5">Pay online instantly</span>
+                          <span>⚡ UPI QR</span>
+                          <span className="text-[10px] font-normal text-slate-500 mt-0.5">Pay online</span>
                         </button>
 
                         <button
@@ -672,14 +683,33 @@ export default function CustomerMenu({
                           onClick={() => setPaymentMethod('CASH')}
                           className={`p-2.5 rounded-xl border text-xs font-bold flex flex-col items-center justify-center transition-all ${
                             paymentMethod === 'CASH'
-                              ? 'bg-orange-50 border-orange-400 text-orange-700 ring-1 ring-orange-400'
+                              ? 'bg-orange-50 border-orange-400 text-orange-700 ring-1 ring-orange-400 shadow-sm'
                               : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
                           }`}
                         >
-                          <span>💵 Cash at Counter</span>
-                          <span className="text-[10px] font-normal text-slate-500 mt-0.5">Pay when collecting</span>
+                          <span>💵 Cash</span>
+                          <span className="text-[10px] font-normal text-slate-500 mt-0.5">Pay at counter</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setPaymentMethod('CREDIT')}
+                          className={`p-2.5 rounded-xl border text-xs font-bold flex flex-col items-center justify-center transition-all ${
+                            paymentMethod === 'CREDIT'
+                              ? 'bg-indigo-50 border-indigo-400 text-indigo-700 ring-1 ring-indigo-400 shadow-sm'
+                              : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                          }`}
+                        >
+                          <span>📋 Staff Credit</span>
+                          <span className="text-[10px] font-normal text-slate-500 mt-0.5">Pay weekly tab</span>
                         </button>
                       </div>
+
+                      {paymentMethod === 'CREDIT' && (
+                        <p className="text-[11px] text-indigo-700 bg-indigo-50 p-2.5 rounded-xl border border-indigo-100 mt-2">
+                          📋 <strong>Weekly Khata:</strong> This order (₹{cartSubtotal}) will be charged to your weekly staff account. Please verify your Name and Desk above.
+                        </p>
+                      )}
                     </div>
                   </div>
                 )}
