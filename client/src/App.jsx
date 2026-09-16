@@ -35,6 +35,10 @@ export default function App() {
     try {
       const saved = localStorage.getItem('bmu_active_order');
       const parsed = saved ? JSON.parse(saved) : null;
+      if (parsed && (parsed.status === 'COMPLETED' || parsed.status === 'CANCELLED')) {
+        localStorage.removeItem('bmu_active_order');
+        return null;
+      }
       return (parsed && typeof parsed === 'object' && parsed.id) ? parsed : null;
     } catch {
       return null;
@@ -60,14 +64,55 @@ export default function App() {
     localStorage.setItem('bmu_canteen_cart', JSON.stringify(cart));
   }, [cart]);
 
-  // Sync Active Order to localStorage
+  // Sync Active Order to localStorage (only persist if pending/preparing/ready)
   useEffect(() => {
-    if (activeOrder) {
+    if (activeOrder && activeOrder.status !== 'COMPLETED' && activeOrder.status !== 'CANCELLED') {
       localStorage.setItem('bmu_active_order', JSON.stringify(activeOrder));
     } else {
       localStorage.removeItem('bmu_active_order');
     }
   }, [activeOrder]);
+
+  // Proactively verify active order status with server on load, tab focus, or socket reconnect
+  useEffect(() => {
+    if (!activeOrder?.id) return;
+
+    const verifyOrderStatus = async () => {
+      try {
+        const res = await fetch(`/api/orders/${activeOrder.id}`);
+        if (!res.ok) {
+          if (res.status === 404) {
+            // Order no longer exists in DB (e.g. wiped or invalid)
+            setActiveOrder(null);
+            localStorage.removeItem('bmu_active_order');
+          }
+          return;
+        }
+        const fresh = await res.json();
+        if (fresh.status === 'COMPLETED' || fresh.status === 'CANCELLED') {
+          // Order was completed while customer was offline/refreshed
+          setActiveOrder(null);
+          localStorage.removeItem('bmu_active_order');
+        } else if (fresh.status !== activeOrder.status) {
+          // Status advanced (e.g. PREPARING or READY)
+          setActiveOrder(fresh);
+        }
+      } catch (err) {
+        console.warn('Unable to verify order status with server:', err);
+      }
+    };
+
+    verifyOrderStatus();
+
+    const handleWindowFocus = () => verifyOrderStatus();
+    window.addEventListener('focus', handleWindowFocus);
+    socket.on('connect', verifyOrderStatus);
+
+    return () => {
+      window.removeEventListener('focus', handleWindowFocus);
+      socket.off('connect', verifyOrderStatus);
+    };
+  }, [activeOrder?.id]);
 
   // Handle URL history state when changing views
   const handleSetView = (view) => {

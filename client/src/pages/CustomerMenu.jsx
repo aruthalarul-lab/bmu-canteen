@@ -34,6 +34,7 @@ export default function CustomerMenu({
   const [paymentMethod, setPaymentMethod] = useState('UPI'); // 'UPI' or 'CASH'
   const [submittingOrder, setSubmittingOrder] = useState(false);
   const [showUpiModal, setShowUpiModal] = useState(false);
+  const [completedNotice, setCompletedNotice] = useState(null);
 
   // Fetch menu on load
   const fetchMenu = async () => {
@@ -90,7 +91,19 @@ export default function CustomerMenu({
             origin: { y: 0.6 }
           });
         }
-        setActiveOrder(updated);
+
+        if (updated.status === 'COMPLETED') {
+          // Food handed over! Clear active tracker and show celebratory completed banner
+          setCompletedNotice(updated);
+          setActiveOrder(null);
+          setTimeout(() => {
+            setCompletedNotice(null);
+          }, 10000);
+        } else if (updated.status === 'CANCELLED') {
+          setActiveOrder(null);
+        } else {
+          setActiveOrder(updated);
+        }
       }
     };
 
@@ -98,7 +111,7 @@ export default function CustomerMenu({
     return () => {
       socket.off('order-status-changed', handleStatusChange);
     };
-  }, [activeOrder]);
+  }, [activeOrder?.id, activeOrder?.status]);
 
   const safeCart = Array.isArray(cart) ? cart : [];
   const safeItems = Array.isArray(items) ? items : [];
@@ -185,6 +198,39 @@ export default function CustomerMenu({
 
   return (
     <div className="min-h-[calc(100vh-4rem)] pb-24">
+      {/* Order Handed Over / Completed Celebration Banner */}
+      {completedNotice && (
+        <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white p-4 shadow-lg sticky top-16 z-30 transition-all animate-fade-in border-b border-emerald-400">
+          <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center space-x-3 text-center sm:text-left">
+              <div className="px-3 py-1.5 rounded-xl bg-white text-emerald-700 font-extrabold text-xl font-mono-code shadow-md">
+                Token #{completedNotice.token_no}
+              </div>
+              <div>
+                <div className="flex items-center space-x-2 justify-center sm:justify-start">
+                  <span className="font-bold text-base flex items-center gap-1.5">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-200" />
+                    Order Handed Over!
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full text-xs font-extrabold uppercase tracking-wide bg-emerald-400 text-slate-900">
+                    DELIVERED
+                  </span>
+                </div>
+                <p className="text-xs text-emerald-100">
+                  Thank you for dining with BMU Canteen. Enjoy your meal!
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setCompletedNotice(null)}
+              className="px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white text-xs font-semibold transition-colors"
+            >
+              ✕ Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Active Order Live Tracker Banner (If customer placed an order) */}
       {activeOrder && activeOrder.status !== 'COMPLETED' && activeOrder.status !== 'CANCELLED' && (
         <div className="bg-gradient-to-r from-orange-600 via-amber-600 to-orange-500 text-white p-4 shadow-lg sticky top-16 z-30 transition-all">
@@ -226,15 +272,12 @@ export default function CustomerMenu({
                 </button>
               )}
               <button
-                onClick={() => {
-                  if (confirm('Dismiss this order tracker?')) {
-                    setActiveOrder(null);
-                  }
-                }}
-                className="p-1.5 rounded-lg hover:bg-white/20 text-white/80 transition-colors"
-                title="Dismiss"
+                onClick={() => setActiveOrder(null)}
+                className="px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/90 text-xs font-medium transition-colors flex items-center gap-1"
+                title="Dismiss Order Tracker"
               >
-                <X className="w-4 h-4" />
+                <X className="w-3.5 h-3.5" />
+                <span>Dismiss</span>
               </button>
             </div>
           </div>
