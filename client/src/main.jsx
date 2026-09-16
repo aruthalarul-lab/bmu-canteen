@@ -20,25 +20,30 @@ class ErrorBoundary extends React.Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div style={{ padding: 40, fontFamily: 'system-ui, sans-serif', maxWidth: 600, margin: '40px auto', textAlign: 'center', background: '#fff', borderRadius: 24, boxShadow: '0 10px 25px rgba(0,0,0,0.05)', border: '1px solid #fee2e2' }}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>🍽️</div>
-          <h2 style={{ color: '#991b1b', margin: '0 0 8px 0', fontSize: 20, fontWeight: 800 }}>BMU Canteen - Loading Notice</h2>
-          <p style={{ color: '#64748b', fontSize: 14 }}>{this.state.error?.message || 'A browser state issue occurred.'}</p>
-          <div style={{ marginTop: 24, display: 'flex', gap: 12, justifyContent: 'center' }}>
+        <div style={{ padding: 40, fontFamily: 'system-ui, sans-serif', maxWidth: 640, margin: '40px auto', textAlign: 'center', background: '#fff', borderRadius: 24, boxShadow: '0 10px 25px rgba(0,0,0,0.05)', border: '1px solid #fee2e2' }}>
+          <div style={{ fontSize: 48, marginBottom: 12 }}>🍽️</div>
+          <h2 style={{ color: '#991b1b', margin: '0 0 8px 0', fontSize: 22, fontWeight: 800 }}>BMU Canteen - Loading Notice</h2>
+          <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 12, padding: 12, margin: '16px 0', color: '#b91c1c', fontSize: 13, fontFamily: 'monospace', textAlign: 'left', wordBreak: 'break-all' }}>
+            <strong>Error:</strong> {this.state.error?.message || String(this.state.error)}
+          </div>
+          <p style={{ color: '#94a3b8', fontSize: 11, marginBottom: 20 }}>Build: v1.0.2-live • {new Date().toLocaleTimeString()}</p>
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
             <button
               onClick={() => {
-                try { localStorage.clear(); } catch(e) {}
-                window.location.href = '/';
+                try { localStorage.clear(); sessionStorage.clear(); } catch(e) {}
+                window.location.href = '/?nocache=' + Date.now();
               }}
-              style={{ padding: '10px 20px', borderRadius: 12, background: '#ea580c', color: '#fff', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}
+              style={{ padding: '12px 24px', borderRadius: 12, background: '#ea580c', color: '#fff', border: 'none', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 12px rgba(234, 88, 12, 0.3)' }}
             >
-              Reset Cache & Reload
+              Force Clear Cache & Reload
             </button>
             <button
-              onClick={() => window.location.reload()}
-              style={{ padding: '10px 20px', borderRadius: 12, background: '#f1f5f9', color: '#334155', border: '1px solid #cbd5e1', fontWeight: 'bold', cursor: 'pointer' }}
+              onClick={() => {
+                window.location.href = '/?view=operator';
+              }}
+              style={{ padding: '12px 20px', borderRadius: 12, background: '#0f172a', color: '#fff', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}
             >
-              Refresh
+              Open Operator Console
             </button>
           </div>
         </div>
