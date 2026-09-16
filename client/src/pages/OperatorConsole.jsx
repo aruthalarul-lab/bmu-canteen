@@ -3,7 +3,7 @@ import {
   Bell, Volume2, VolumeX, CheckCircle, Clock, ChefHat, 
   Package, DollarSign, QrCode, RefreshCw, AlertTriangle, 
   Trash2, Plus, Minus, ArrowRight, Settings, Check, X, ShieldAlert,
-  Flame, Sparkles, TrendingUp, CreditCard
+  Flame, Sparkles, TrendingUp, CreditCard, Edit2, Search
 } from 'lucide-react';
 import { playNewOrderSound, playOrderReadySound } from '../utils/audio';
 import socket from '../services/socket';
@@ -83,6 +83,84 @@ export default function OperatorConsole() {
     }
   };
 
+  // Edit Item Modal State
+  const [editingItem, setEditingItem] = useState(null);
+  const [editItemForm, setEditItemForm] = useState({
+    name: '',
+    category_id: 1,
+    price: '',
+    description: '',
+    is_veg: 1,
+    is_quick_item: 1,
+    image_emoji: '🍲',
+  });
+  const [updatingItem, setUpdatingItem] = useState(false);
+  const [deletingItem, setDeletingItem] = useState(false);
+
+  // Stock / Menu Manager Search & Filter State
+  const [stockSearchQuery, setStockSearchQuery] = useState('');
+  const [stockCategoryFilter, setStockCategoryFilter] = useState('ALL');
+
+  const startEditItem = (item) => {
+    setEditingItem(item);
+    setEditItemForm({
+      name: item.name,
+      category_id: item.category_id || 1,
+      price: String(item.price),
+      description: item.description || '',
+      is_veg: item.is_veg === 1 ? 1 : 0,
+      is_quick_item: item.is_quick_item === 1 ? 1 : 0,
+      image_emoji: item.image_emoji || '🍲',
+    });
+  };
+
+  const handleUpdateItem = async (e) => {
+    e.preventDefault();
+    if (!editItemForm.name || !editItemForm.price) {
+      alert('Please enter Item Name and Price');
+      return;
+    }
+    setUpdatingItem(true);
+    try {
+      const res = await fetch(`/api/menu/${editingItem.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editItemForm),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setMenuItems(prev => prev.map(i => i.id === updated.id ? updated : i));
+        setEditingItem(null);
+      } else {
+        alert('Failed to update item');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error updating item');
+    } finally {
+      setUpdatingItem(false);
+    }
+  };
+
+  const handleDeleteItem = async (itemId) => {
+    if (!confirm('Are you sure you want to permanently delete this item from the menu?')) return;
+    setDeletingItem(true);
+    try {
+      const res = await fetch(`/api/menu/${itemId}`, { method: 'DELETE' });
+      if (res.ok) {
+        setMenuItems(prev => prev.filter(i => i.id !== itemId));
+        setEditingItem(null);
+      } else {
+        alert('Failed to delete item');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error deleting item');
+    } finally {
+      setDeletingItem(false);
+    }
+  };
+
   // Load Initial Data
   const loadData = async () => {
     try {
@@ -148,14 +226,26 @@ export default function OperatorConsole() {
       );
     };
 
+    const handleMenuChanged = () => {
+      fetch('/api/menu')
+        .then(r => r.json())
+        .then(data => {
+          if (data.items) setMenuItems(data.items);
+          if (data.categories) setCategories(data.categories);
+        })
+        .catch(() => {});
+    };
+
     socket.on('new-order', handleNewOrder);
     socket.on('order-status-changed', handleStatusChanged);
     socket.on('stock-updated', handleStockUpdated);
+    socket.on('menu-changed', handleMenuChanged);
 
     return () => {
       socket.off('new-order', handleNewOrder);
       socket.off('order-status-changed', handleStatusChanged);
       socket.off('stock-updated', handleStockUpdated);
+      socket.off('menu-changed', handleMenuChanged);
     };
   }, [audioEnabled]);
 
@@ -834,17 +924,17 @@ export default function OperatorConsole() {
           </div>
         )}
 
-        {/* ================= VIEW 3: 1-TAP "86" STOCK MANAGER ================= */}
+        {/* ================= VIEW 3: 1-TAP "86" STOCK & MENU MANAGER ================= */}
         {tab === 'stock' && (
           <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-black text-slate-900 flex items-center space-x-2">
                   <Package className="w-5 h-5 text-orange-500" />
-                  <span>Instant Menu Availability (1-Tap 86)</span>
+                  <span>Menu & Stock Manager</span>
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Tapping "Out of Stock" instantly updates all employee phones in real-time.
+                  Edit name, price, category, or tap "Sold Out" to update customer phones live.
                 </p>
               </div>
               <div className="flex items-center space-x-3">
@@ -853,7 +943,7 @@ export default function OperatorConsole() {
                 </span>
                 <button
                   onClick={() => setShowAddItemModal(true)}
-                  className="px-3 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs shadow-md shadow-orange-500/20 flex items-center space-x-1.5 transition-all active:scale-95"
+                  className="px-3.5 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs shadow-md shadow-orange-500/20 flex items-center space-x-1.5 transition-all active:scale-95"
                 >
                   <Plus className="w-4 h-4" />
                   <span>Add Menu Item</span>
@@ -861,50 +951,122 @@ export default function OperatorConsole() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {menuItems.map(item => {
-                const isAvailable = item.is_available === 1;
-                return (
-                  <div
-                    key={item.id}
-                    className={`p-3.5 rounded-2xl border flex items-center justify-between transition-all ${
-                      isAvailable
-                        ? 'bg-white border-slate-200'
-                        : 'bg-rose-50/50 border-rose-200'
-                    }`}
+            {/* Search & Category Filter Pills */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-1">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search item to edit or toggle stock..."
+                  value={stockSearchQuery}
+                  onChange={(e) => setStockSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-8 py-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                />
+                {stockSearchQuery && (
+                  <button 
+                    onClick={() => setStockSearchQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
                   >
-                    <div className="flex items-center space-x-3">
-                      <span className="text-2xl">{item.image_emoji || '🍲'}</span>
-                      <div>
-                        <div className="flex items-center space-x-1.5">
-                          {item.is_veg === 1 ? (
-                            <span className="w-2.5 h-2.5 rounded-sm border border-emerald-600 bg-white flex items-center justify-center p-0.5 shrink-0" title="Veg">
-                              <span className="w-1 h-1 rounded-full bg-emerald-600"></span>
-                            </span>
-                          ) : (
-                            <span className="w-2.5 h-2.5 rounded-sm border border-rose-600 bg-white flex items-center justify-center p-0.5 shrink-0" title="Non-Veg">
-                              <span className="w-1 h-1 rounded-full bg-rose-600"></span>
-                            </span>
-                          )}
-                          <p className="font-bold text-sm text-slate-900">{item.name}</p>
-                        </div>
-                        <p className="text-xs text-slate-400 mt-0.5">₹{item.price} • {item.category_name}</p>
-                      </div>
-                    </div>
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
 
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+                <button
+                  onClick={() => setStockCategoryFilter('ALL')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                    stockCategoryFilter === 'ALL'
+                      ? 'bg-slate-900 text-white shadow-sm'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  All ({menuItems.length})
+                </button>
+                {categories.map(c => {
+                  const count = menuItems.filter(i => String(i.category_id) === String(c.id)).length;
+                  return (
                     <button
-                      onClick={() => toggleStock(item.id)}
-                      className={`px-3 py-1.5 rounded-xl font-extrabold text-xs transition-all shadow-sm ${
-                        isAvailable
-                          ? 'bg-emerald-100 hover:bg-emerald-200 text-emerald-800'
-                          : 'bg-rose-600 hover:bg-rose-700 text-white'
+                      key={c.id}
+                      onClick={() => setStockCategoryFilter(String(c.id))}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                        String(stockCategoryFilter) === String(c.id)
+                          ? 'bg-slate-900 text-white shadow-sm'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                       }`}
                     >
-                      {isAvailable ? 'In Stock' : 'SOLD OUT'}
+                      {c.name} ({count})
                     </button>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Grid of Menu Items */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {menuItems
+                .filter(item => {
+                  const matchesCat = stockCategoryFilter === 'ALL' || String(item.category_id) === String(stockCategoryFilter);
+                  const q = (stockSearchQuery || '').toLowerCase().trim();
+                  const matchesSearch = !q || (item.name || '').toLowerCase().includes(q) || (item.category_name || '').toLowerCase().includes(q);
+                  return matchesCat && matchesSearch;
+                })
+                .map(item => {
+                  const isAvailable = item.is_available === 1;
+                  return (
+                    <div
+                      key={item.id}
+                      className={`p-3.5 rounded-2xl border flex items-center justify-between gap-2 transition-all ${
+                        isAvailable
+                          ? 'bg-white border-slate-200 shadow-sm hover:border-slate-300'
+                          : 'bg-rose-50/50 border-rose-200'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-3 min-w-0">
+                        <span className="text-2xl shrink-0">{item.image_emoji || '🍲'}</span>
+                        <div className="min-w-0">
+                          <div className="flex items-center space-x-1.5">
+                            {item.is_veg === 1 ? (
+                              <span className="w-2.5 h-2.5 rounded-sm border border-emerald-600 bg-white flex items-center justify-center p-0.5 shrink-0" title="Veg">
+                                <span className="w-1 h-1 rounded-full bg-emerald-600"></span>
+                              </span>
+                            ) : (
+                              <span className="w-2.5 h-2.5 rounded-sm border border-rose-600 bg-white flex items-center justify-center p-0.5 shrink-0" title="Non-Veg">
+                                <span className="w-1 h-1 rounded-full bg-rose-600"></span>
+                              </span>
+                            )}
+                            <p className="font-bold text-sm text-slate-900 truncate">{item.name}</p>
+                          </div>
+                          <p className="text-xs text-slate-500 mt-0.5 font-medium">
+                            <span className="font-bold text-slate-800">₹{item.price}</span> • <span className="text-slate-400">{item.category_name || 'Item'}</span>
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center space-x-1.5 shrink-0">
+                        <button
+                          onClick={() => startEditItem(item)}
+                          className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-orange-50 text-slate-700 hover:text-orange-700 border border-slate-200 transition-colors text-xs font-bold flex items-center gap-1 active:scale-95"
+                          title="Edit Name, Price, Category"
+                        >
+                          <Edit2 className="w-3.5 h-3.5 text-orange-600" />
+                          <span>Edit</span>
+                        </button>
+
+                        <button
+                          onClick={() => toggleStock(item.id)}
+                          className={`px-3 py-1.5 rounded-xl font-extrabold text-xs transition-all shadow-sm active:scale-95 ${
+                            isAvailable
+                              ? 'bg-emerald-100 hover:bg-emerald-200 text-emerald-800'
+                              : 'bg-rose-600 hover:bg-rose-700 text-white'
+                          }`}
+                        >
+                          {isAvailable ? 'In Stock' : 'SOLD OUT'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
             </div>
           </div>
         )}
@@ -1142,6 +1304,191 @@ export default function OperatorConsole() {
                   >
                     {addingItem ? 'Adding...' : 'Add to Menu'}
                   </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Menu Item Modal */}
+        {editingItem && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+            <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden border border-slate-100 max-h-[90vh] flex flex-col">
+              <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-6 py-4 text-white flex items-center justify-between shrink-0">
+                <div className="flex items-center space-x-2">
+                  <Edit2 className="w-5 h-5 text-orange-400" />
+                  <h3 className="font-bold text-base">Edit Menu Item</h3>
+                </div>
+                <button 
+                  onClick={() => setEditingItem(null)}
+                  className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <form onSubmit={handleUpdateItem} className="p-6 space-y-4 overflow-y-auto flex-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                      Item Name *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Masala Dosa"
+                      value={editItemForm.name}
+                      onChange={(e) => setEditItemForm({ ...editItemForm, name: e.target.value })}
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                      Category *
+                    </label>
+                    <select
+                      value={editItemForm.category_id}
+                      onChange={(e) => setEditItemForm({ ...editItemForm, category_id: parseInt(e.target.value, 10) })}
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none bg-white"
+                    >
+                      {categories.map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                      Price (₹) *
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min="1"
+                      step="1"
+                      placeholder="e.g. 50"
+                      value={editItemForm.price}
+                      onChange={(e) => setEditItemForm({ ...editItemForm, price: e.target.value })}
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Diet Type Selector (Veg vs Non-Veg) */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
+                    Food Type (Diet) *
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setEditItemForm({ ...editItemForm, is_veg: 1 })}
+                      className={`p-3 rounded-xl border flex items-center justify-center space-x-2 font-bold text-xs transition-all ${
+                        editItemForm.is_veg === 1
+                          ? 'bg-emerald-50 border-emerald-500 text-emerald-800 ring-2 ring-emerald-500/20 shadow-sm'
+                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      <span className="w-3.5 h-3.5 rounded-sm border border-emerald-600 bg-white flex items-center justify-center p-0.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                      </span>
+                      <span>Pure Veg 🟢</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setEditItemForm({ ...editItemForm, is_veg: 0 })}
+                      className={`p-3 rounded-xl border flex items-center justify-center space-x-2 font-bold text-xs transition-all ${
+                        editItemForm.is_veg === 0
+                          ? 'bg-rose-50 border-rose-500 text-rose-800 ring-2 ring-rose-500/20 shadow-sm'
+                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      <span className="w-3.5 h-3.5 rounded-sm border border-rose-600 bg-white flex items-center justify-center p-0.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
+                      </span>
+                      <span>Non-Veg 🔴</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Emoji Selector */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    Select Icon Emoji
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {['🍲', '🍗', '🍳', '🌯', '🥪', '🍛', '🥘', '🍜', '🥟', '🥞', '☕', '🥤', '🍨', '🍱', '🍔', '🍕', '🥗', '🍩', '🍪'].map(emoji => (
+                      <button
+                        key={emoji}
+                        type="button"
+                        onClick={() => setEditItemForm({ ...editItemForm, image_emoji: emoji })}
+                        className={`w-9 h-9 text-lg rounded-xl flex items-center justify-center transition-all ${
+                          editItemForm.image_emoji === emoji
+                            ? 'bg-orange-100 border-2 border-orange-500 scale-110 shadow-sm'
+                            : 'bg-slate-100 hover:bg-slate-200 border border-slate-200'
+                        }`}
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    Short Description (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Served hot with fresh chutney and sambar"
+                    value={editItemForm.description}
+                    onChange={(e) => setEditItemForm({ ...editItemForm, description: e.target.value })}
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex items-center space-x-2 pt-1">
+                  <input
+                    type="checkbox"
+                    id="editQuickItemCheck"
+                    checked={editItemForm.is_quick_item === 1}
+                    onChange={(e) => setEditItemForm({ ...editItemForm, is_quick_item: e.target.checked ? 1 : 0 })}
+                    className="w-4 h-4 text-orange-600 rounded border-slate-300 focus:ring-orange-500"
+                  />
+                  <label htmlFor="editQuickItemCheck" className="text-xs font-semibold text-slate-700 cursor-pointer">
+                    Show as Fast-POS quick button on operator screen
+                  </label>
+                </div>
+
+                <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+                  <button
+                    type="button"
+                    disabled={deletingItem}
+                    onClick={() => handleDeleteItem(editingItem.id)}
+                    className="px-3 py-2 rounded-xl text-rose-600 hover:bg-rose-50 font-bold text-xs flex items-center gap-1.5 transition-colors border border-rose-200"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>{deletingItem ? 'Deleting...' : 'Delete Item'}</span>
+                  </button>
+
+                  <div className="flex items-center space-x-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditingItem(null)}
+                      className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-100 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={updatingItem}
+                      className="px-5 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-bold text-xs shadow-md shadow-orange-500/20 transition-all flex items-center gap-1.5"
+                    >
+                      {updatingItem ? 'Saving...' : 'Save Changes'}
+                    </button>
+                  </div>
                 </div>
               </form>
             </div>

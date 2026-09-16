@@ -161,6 +161,14 @@ app.put('/api/menu/:id', (req, res) => {
   res.json(updated);
 });
 
+// DELETE /api/menu/:id - Delete item
+app.delete('/api/menu/:id', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  db.prepare('DELETE FROM menu_items WHERE id = ?').run(id);
+  io.emit('menu-changed', { action: 'delete', id });
+  res.json({ success: true, id });
+});
+
 // Helper to fetch full order with items
 function getOrderWithItems(orderId) {
   const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
