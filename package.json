@@ -1,0 +1,22 @@
+{
+  "name": "bmu-canteen",
+  "version": "1.0.0",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js",
+    "server": "node server/server.js",
+    "client": "npm --prefix client run dev",
+    "build": "npm --prefix client run build"
+  },
+  "keywords": ["canteen", "pos", "kds", "upi-qr"],
+  "author": "",
+  "license": "MIT",
+  "description": "Smart Canteen Management Web App for BMU Canteen with Mobile Ordering, Operator Fast-POS & Delivery KDS, and Public TV Display",
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "qrcode": "^1.5.4",
+    "socket.io": "^4.8.3"
+  }
+}

@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+client/node_modules/
+mingit/
+
+# SQLite dynamic files
+canteen.db-shm
+canteen.db-wal
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment
+.env
+.env.local
+
+# OS files
+.DS_Store
+Thumbs.db
