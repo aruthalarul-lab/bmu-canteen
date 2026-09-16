@@ -4,7 +4,7 @@ import {
   Package, DollarSign, QrCode, RefreshCw, AlertTriangle, 
   Trash2, Plus, Minus, ArrowRight, Settings, Check, X, ShieldAlert,
   Flame, Sparkles, TrendingUp, CreditCard, Edit2, Search,
-  Lock, Unlock, BookOpen, FileText, Users
+  Lock, Unlock, BookOpen, FileText, Users, Printer, Download
 } from 'lucide-react';
 import { playNewOrderSound, playOrderReadySound } from '../utils/audio';
 import socket from '../services/socket';
@@ -62,6 +62,9 @@ export default function OperatorConsole() {
   const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
   const [newCustomer, setNewCustomer] = useState({ customer_name: '', phone: '', desk: '', notes: '' });
   const [addingCustomer, setAddingCustomer] = useState(false);
+
+  // QR Standee Modal State
+  const [showQrStandeeModal, setShowQrStandeeModal] = useState(false);
 
   // Add Item Modal State
   const [showAddItemModal, setShowAddItemModal] = useState(false);
@@ -796,6 +799,15 @@ export default function OperatorConsole() {
               title="Settings & PIN"
             >
               <Settings className="w-4 h-4" />
+            </button>
+
+            <button
+              onClick={() => setShowQrStandeeModal(true)}
+              className="p-2 rounded-xl text-xs sm:text-sm font-bold text-orange-600 hover:bg-orange-50 transition-all flex items-center gap-1.5"
+              title="Print Table & Counter QR Standee"
+            >
+              <QrCode className="w-4 h-4 text-orange-500" />
+              <span className="hidden lg:inline text-xs font-bold">QR Standee</span>
             </button>
           </div>
 
@@ -1643,6 +1655,61 @@ export default function OperatorConsole() {
                 {settingsSaving ? 'Saving...' : 'Save Settings'}
               </button>
             </form>
+
+            {/* Table & Counter QR Standee Card */}
+            <div className="mt-8 pt-6 border-t border-slate-200">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <QrCode className="w-5 h-5 text-orange-500" />
+                    <span>Table & Counter QR Barcode</span>
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Place this QR barcode on dining tables or at the counter so customers can scan and order.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowQrStandeeModal(true)}
+                  className="px-4 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-bold text-xs shadow-md shadow-orange-500/20 transition-all flex items-center gap-1.5 shrink-0 self-start sm:self-auto"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>Print Standee</span>
+                </button>
+              </div>
+
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex flex-col sm:flex-row items-center gap-4">
+                <img 
+                  src="/canteen-qr.png" 
+                  alt="BMU Canteen QR Code" 
+                  className="w-36 h-36 rounded-xl border border-slate-200 bg-white p-2 shadow-sm shrink-0"
+                />
+                <div className="text-center sm:text-left space-y-2">
+                  <div>
+                    <p className="font-bold text-sm text-slate-800">Scan to Order Online</p>
+                    <p className="text-xs text-slate-500 font-mono">https://bmu-canteen.onrender.com</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2 justify-center sm:justify-start pt-1">
+                    <a 
+                      href="/canteen-qr.png" 
+                      download="bmu-canteen-qr.png" 
+                      className="px-3 py-1.5 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-xs font-bold text-slate-700 transition-colors shadow-sm flex items-center gap-1"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Download PNG</span>
+                    </a>
+                    <a 
+                      href="/canteen-qr.svg" 
+                      download="bmu-canteen-qr.svg" 
+                      className="px-3 py-1.5 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-xs font-bold text-slate-700 transition-colors shadow-sm flex items-center gap-1"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Download SVG</span>
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -2367,6 +2434,122 @@ export default function OperatorConsole() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Printable QR Standee Poster Modal */}
+        {showQrStandeeModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in print:p-0 print:bg-white print:fixed print:inset-0">
+            <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden border border-slate-100 flex flex-col print:shadow-none print:border-none print:w-full print:max-w-none">
+              
+              {/* Header - Hidden on Print */}
+              <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-6 py-4 text-white flex items-center justify-between print:hidden">
+                <div className="flex items-center space-x-2">
+                  <QrCode className="w-5 h-5 text-orange-400" />
+                  <h3 className="font-bold text-base">Canteen Table / Counter QR Standee</h3>
+                </div>
+                <button
+                  onClick={() => setShowQrStandeeModal(false)}
+                  className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Printable Standee Sheet */}
+              <div className="p-6 sm:p-8 text-center space-y-5 print:p-8 print:space-y-6">
+                {/* Branding Badge */}
+                <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-orange-100 text-orange-900 font-extrabold text-xs tracking-wider uppercase">
+                  <span>🍽️ Campus QuickBite</span>
+                </div>
+
+                <div>
+                  <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                    {settings.canteen_name || 'BMU CANTEEN'}
+                  </h1>
+                  <p className="text-xs font-extrabold text-orange-600 uppercase tracking-widest mt-1">
+                    SCAN TO ORDER FROM YOUR SEAT
+                  </p>
+                </div>
+
+                {/* QR Code Container with Standee Frame */}
+                <div className="p-4 bg-gradient-to-b from-orange-50 to-amber-50 rounded-3xl border-2 border-orange-400 inline-block shadow-md print:shadow-none">
+                  <img
+                    src="/canteen-qr.png"
+                    alt="Scan to order menu"
+                    className="w-56 h-56 mx-auto rounded-2xl bg-white p-2 border-2 border-slate-900"
+                  />
+                  <div className="mt-2.5 flex items-center justify-center gap-1.5 text-slate-800 font-mono font-bold text-xs">
+                    <span>📱 Scan with Any Phone Camera</span>
+                  </div>
+                </div>
+
+                {/* 3 Step Guide */}
+                <div className="grid grid-cols-3 gap-2 max-w-sm mx-auto text-center pt-1">
+                  <div className="p-2 bg-slate-50 rounded-xl border border-slate-100">
+                    <p className="text-sm">📸</p>
+                    <p className="text-[10px] font-bold text-slate-800 mt-0.5">1. Scan</p>
+                    <p className="text-[9px] text-slate-500">Camera or Lens</p>
+                  </div>
+                  <div className="p-2 bg-slate-50 rounded-xl border border-slate-100">
+                    <p className="text-sm">🛒</p>
+                    <p className="text-[10px] font-bold text-slate-800 mt-0.5">2. Choose</p>
+                    <p className="text-[9px] text-slate-500">Pick food & order</p>
+                  </div>
+                  <div className="p-2 bg-slate-50 rounded-xl border border-slate-100">
+                    <p className="text-sm">🔔</p>
+                    <p className="text-[10px] font-bold text-slate-800 mt-0.5">3. Collect</p>
+                    <p className="text-[9px] text-slate-500">Watch token on TV</p>
+                  </div>
+                </div>
+
+                {/* Direct Link Footer */}
+                <div className="text-xs text-slate-500 font-mono pt-1">
+                  bmu-canteen.onrender.com
+                </div>
+              </div>
+
+              {/* Action Buttons - Hidden on Print */}
+              <div className="bg-slate-50 px-6 py-4 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3 print:hidden">
+                <div className="flex gap-2">
+                  <a
+                    href="/canteen-qr.png"
+                    download="bmu-canteen-table-qr.png"
+                    className="px-3 py-2 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-xs font-bold text-slate-700 transition-colors flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>PNG</span>
+                  </a>
+                  <a
+                    href="/canteen-qr.svg"
+                    download="bmu-canteen-table-qr.svg"
+                    className="px-3 py-2 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-xs font-bold text-slate-700 transition-colors flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>SVG</span>
+                  </a>
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowQrStandeeModal(false)}
+                    className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-100 transition-colors"
+                  >
+                    Close
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    className="px-5 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-bold text-xs shadow-md shadow-orange-500/20 transition-all flex items-center gap-1.5"
+                  >
+                    <Printer className="w-4 h-4" />
+                    <span>Print Standee</span>
+                  </button>
+                </div>
+              </div>
+
             </div>
           </div>
         )}

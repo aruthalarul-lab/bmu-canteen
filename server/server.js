@@ -84,6 +84,44 @@ app.post('/api/settings', (req, res) => {
   res.json(newSettings);
 });
 
+// GET /api/qr/site - Return Site URL QR Code
+app.get('/api/qr/site', async (req, res) => {
+  try {
+    const siteUrl = 'https://bmu-canteen.onrender.com';
+    const format = req.query.format;
+
+    if (format === 'image') {
+      const buffer = await QRCode.toBuffer(siteUrl, {
+        width: 600,
+        margin: 2,
+        color: { dark: '#0f172a', light: '#ffffff' }
+      });
+      res.setHeader('Content-Type', 'image/png');
+      return res.send(buffer);
+    }
+
+    if (format === 'svg') {
+      const svg = await QRCode.toString(siteUrl, { type: 'svg', margin: 2 });
+      res.setHeader('Content-Type', 'image/svg+xml');
+      return res.send(svg);
+    }
+
+    const dataUrl = await QRCode.toDataURL(siteUrl, {
+      width: 600,
+      margin: 2,
+      color: { dark: '#0f172a', light: '#ffffff' }
+    });
+
+    res.json({
+      url: siteUrl,
+      qr_data_url: dataUrl
+    });
+  } catch (err) {
+    console.error('QR generation error:', err);
+    res.status(500).json({ error: 'Failed to generate QR code' });
+  }
+});
+
 // POST /api/operator/verify-pin - Secure Operator Console Access
 app.post('/api/operator/verify-pin', (req, res) => {
   const { pin } = req.body;

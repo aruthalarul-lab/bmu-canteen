@@ -29,3 +29,13 @@
 .animate-ready-glow {
   animation: readyGlow 2s infinite ease-in-out;
 }
+
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  header, nav, .print\:hidden {
+    display: none !important;
+  }
+}
