@@ -88,11 +88,11 @@ app.post('/api/settings', (req, res) => {
 app.post('/api/operator/verify-pin', (req, res) => {
   const { pin } = req.body;
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get('operator_pin');
-  const storedPin = row ? row.value : '1234';
+  const storedPin = row ? row.value : '1513';
   if (pin && String(pin).trim() === String(storedPin).trim()) {
     return res.json({ success: true, message: 'Operator authenticated' });
   }
-  return res.status(401).json({ error: 'Incorrect PIN. Default is 1234.' });
+  return res.status(401).json({ error: 'Incorrect PIN' });
 });
 
 // GET /api/menu - Categories and Menu Items

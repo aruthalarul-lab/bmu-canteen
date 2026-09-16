@@ -31,7 +31,7 @@ export default function OperatorConsole() {
     canteen_name: 'BMU Canteen',
     upi_id: 'bmucanteen@upi',
     upi_name: 'BMU Office Canteen',
-    operator_pin: '1234',
+    operator_pin: '1513',
   });
   const [settingsSaving, setSettingsSaving] = useState(false);
 
@@ -209,7 +209,7 @@ export default function OperatorConsole() {
         setIsAuthenticated(true);
         setPinInput('');
       } else {
-        setPinError(data.error || 'Incorrect PIN. Try 1234');
+        setPinError(data.error || 'Incorrect PIN');
         setPinInput('');
       }
     } catch (err) {
@@ -634,12 +634,9 @@ export default function OperatorConsole() {
           </form>
 
           <div className="pt-2 border-t border-slate-700/60">
-            <p className="text-[11px] text-slate-400">
-              Default PIN is <span className="text-orange-400 font-mono font-bold">1234</span> (Change in Settings)
-            </p>
             <button
               onClick={() => window.location.href = '/'}
-              className="mt-2 text-xs text-slate-400 hover:text-white transition-colors"
+              className="text-xs text-slate-400 hover:text-white transition-colors"
             >
               ← Back to Customer Menu
             </button>
@@ -1587,13 +1584,13 @@ export default function OperatorConsole() {
                 <input
                   type="password"
                   maxLength={4}
-                  placeholder="e.g. 1234"
+                  placeholder="••••"
                   value={settings.operator_pin || ''}
                   onChange={(e) => setSettings({ ...settings, operator_pin: e.target.value })}
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none font-mono"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none font-mono tracking-widest"
                 />
                 <p className="text-[11px] text-slate-400 mt-1">
-                  Locks the Operator Console from customers. Default PIN is 1234.
+                  Protects the Operator Console and kitchen dispatch from customer access.
                 </p>
               </div>
 

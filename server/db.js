@@ -88,8 +88,8 @@ function initDb() {
   insertSetting.run('upi_id', 'bmucanteen@upi');
   insertSetting.run('upi_name', 'BMU Office Canteen');
   insertSetting.run('is_open', '1');
-  insertSetting.run('token_prefix', '');
-  insertSetting.run('operator_pin', '1234');
+  insertSetting.run('operator_pin', '1513');
+  db.prepare("UPDATE settings SET value = '1513' WHERE key = 'operator_pin' AND value = '1234'").run();
 
   // Seed categories if empty
   const catCount = db.prepare('SELECT COUNT(*) as count FROM categories').get();
