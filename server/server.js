@@ -30,6 +30,18 @@ function getSettingsObj() {
   return settings;
 }
 
+// Middleware to authenticate Operator actions via PIN header
+function requireOperatorAuth(req, res, next) {
+  const pinHeader = req.headers['x-operator-pin'];
+  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get('operator_pin');
+  const storedPin = row ? row.value : '1513';
+
+  if (pinHeader && String(pinHeader).trim() === String(storedPin).trim()) {
+    return next();
+  }
+  return res.status(401).json({ error: 'Unauthorized: Valid Operator PIN required.' });
+}
+
 // Generate UPI Payment Link & QR Code
 // Standard NPCI UPI URI scheme:
 // upi://pay?pa={UPI_ID}&pn={MERCHANT_NAME}&am={AMOUNT}&cu=INR&tn=Order_{TOKEN}
@@ -53,10 +65,10 @@ async function generateUpiQr(amount, tokenNo) {
       },
     });
 
-    return { upiUri, qrDataUrl };
+    return { upiUri, qrDataUrl, upiId, upiName, amount };
   } catch (err) {
     console.error('Error generating UPI QR:', err);
-    return { upiUri: '', qrDataUrl: '' };
+    return { upiUri: '', qrDataUrl: '', upiId: '', upiName: '' };
   }
 }
 
@@ -67,8 +79,8 @@ app.get('/api/settings', (req, res) => {
   res.json(getSettingsObj());
 });
 
-// POST /api/settings
-app.post('/api/settings', (req, res) => {
+// POST /api/settings - Requires Operator Authentication
+app.post('/api/settings', requireOperatorAuth, (req, res) => {
   const updates = req.body;
   const updateStmt = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');
   
@@ -169,8 +181,8 @@ app.get('/api/menu', (req, res) => {
   res.json({ categories, items });
 });
 
-// PATCH /api/menu/:id/toggle-stock - Instant 1-Tap Out-of-Stock toggle
-app.patch('/api/menu/:id/toggle-stock', (req, res) => {
+// PATCH /api/menu/:id/toggle-stock - Instant 1-Tap Out-of-Stock toggle (Requires Operator Auth)
+app.patch('/api/menu/:id/toggle-stock', requireOperatorAuth, (req, res) => {
   const id = parseInt(req.params.id, 10);
   const item = db.prepare('SELECT * FROM menu_items WHERE id = ?').get(id);
 
@@ -187,8 +199,8 @@ app.patch('/api/menu/:id/toggle-stock', (req, res) => {
   res.json({ id, is_available: newStatus });
 });
 
-// POST /api/menu - Add new item
-app.post('/api/menu', (req, res) => {
+// POST /api/menu - Add new item (Requires Operator Auth)
+app.post('/api/menu', requireOperatorAuth, (req, res) => {
   const { category_id, name, description, price, is_veg, is_quick_item, image_emoji } = req.body;
 
   if (!name || price == null) {
@@ -211,8 +223,8 @@ app.post('/api/menu', (req, res) => {
   res.status(201).json(created);
 });
 
-// PUT /api/menu/:id - Edit item
-app.put('/api/menu/:id', (req, res) => {
+// PUT /api/menu/:id - Edit item (Requires Operator Auth)
+app.put('/api/menu/:id', requireOperatorAuth, (req, res) => {
   const id = parseInt(req.params.id, 10);
   const { category_id, name, description, price, is_veg, is_quick_item, image_emoji } = req.body;
 
@@ -233,8 +245,8 @@ app.put('/api/menu/:id', (req, res) => {
   res.json(updated);
 });
 
-// DELETE /api/menu/:id - Delete item
-app.delete('/api/menu/:id', (req, res) => {
+// DELETE /api/menu/:id - Delete item (Requires Operator Auth)
+app.delete('/api/menu/:id', requireOperatorAuth, (req, res) => {
   const id = parseInt(req.params.id, 10);
   db.prepare('DELETE FROM menu_items WHERE id = ?').run(id);
   io.emit('menu-changed', { action: 'delete', id });
@@ -277,7 +289,7 @@ app.get('/api/orders/active', (req, res) => {
 app.get('/api/orders/history', (req, res) => {
   const orders = db.prepare(`
     SELECT * FROM orders 
-    WHERE date(created_at, 'localtime') = date('now', 'localtime')
+    WHERE date(created_at, '+5 hours', '+30 minutes') = date('now', '+5 hours', '+30 minutes')
     ORDER BY id DESC
     LIMIT 100
   `).all();
@@ -305,7 +317,7 @@ app.get('/api/orders/stats', (req, res) => {
       COUNT(CASE WHEN status = 'READY' THEN 1 END) as ready_count,
       COUNT(CASE WHEN status = 'COMPLETED' THEN 1 END) as completed_count
     FROM orders
-    WHERE date(created_at, 'localtime') = date('now', 'localtime')
+    WHERE date(created_at, '+5 hours', '+30 minutes') = date('now', '+5 hours', '+30 minutes')
   `).get();
 
   // Top selling items today
@@ -313,7 +325,7 @@ app.get('/api/orders/stats', (req, res) => {
     SELECT oi.item_name, SUM(oi.quantity) as total_qty, SUM(oi.total_price) as revenue
     FROM order_items oi
     JOIN orders o ON oi.order_id = o.id
-    WHERE date(o.created_at, 'localtime') = date('now', 'localtime') AND o.status != 'CANCELLED'
+    WHERE date(o.created_at, '+5 hours', '+30 minutes') = date('now', '+5 hours', '+30 minutes') AND o.status != 'CANCELLED'
     GROUP BY oi.item_name
     ORDER BY total_qty DESC
     LIMIT 5
@@ -325,7 +337,7 @@ app.get('/api/orders/stats', (req, res) => {
 // POST /api/orders - Place Order (Online or Counter Fast-POS)
 app.post('/api/orders', async (req, res) => {
   try {
-    const { customer_name, customer_desk, customer_phone, payment_method, payment_status, order_type, items } = req.body;
+    const { customer_name, customer_desk, customer_phone, customer_utr, payment_method, payment_status, order_type, items } = req.body;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'Order must contain at least one item' });
@@ -344,8 +356,8 @@ app.post('/api/orders', async (req, res) => {
       return res.status(400).json({ error: 'Student / Employee / Desk ID is compulsory.' });
     }
 
-    // 3. For Staff Credit, mobile number is mandatory
-    if (finalPaymentMethod === 'CREDIT') {
+    // 3. For Staff Credit online orders, mobile number is mandatory (for counter billing, operator can bill directly)
+    if (finalPaymentMethod === 'CREDIT' && finalOrderType === 'ONLINE') {
       const cleanPhone = (customer_phone || '').trim().replace(/\D/g, '');
       if (cleanPhone.length < 10) {
         return res.status(400).json({ error: 'Mobile number (minimum 10 digits) is mandatory for Staff Credit.' });
@@ -385,23 +397,25 @@ app.post('/api/orders', async (req, res) => {
       });
     }
 
-    const tokenNo = getNextTokenNumber();
     // Online cash orders remain PENDING until cashier confirms receipt at Counter 1
     const finalPaymentStatus = (finalPaymentMethod === 'CREDIT' || (finalPaymentMethod === 'CASH' && finalOrderType === 'ONLINE')) ? 'PENDING' : 'PAID';
     const cleanCustomerName = customer_name.trim();
     const cleanCustomerDesk = customer_desk && customer_desk.trim() ? customer_desk.trim() : (finalOrderType === 'COUNTER' ? 'Counter 1 POS' : '');
     const cleanCustomerPhone = customer_phone ? customer_phone.trim() : '';
+    const cleanCustomerUtr = customer_utr ? String(customer_utr).trim() : '';
 
-    // Insert order in database transaction
+    // Insert order in database transaction (token generated atomically inside transaction)
     const createOrderTransaction = db.transaction(() => {
+      const tokenNo = getNextTokenNumber();
       const orderInsert = db.prepare(`
-        INSERT INTO orders (token_no, customer_name, customer_desk, customer_phone, payment_method, payment_status, status, total_amount, order_type)
-        VALUES (?, ?, ?, ?, ?, ?, 'PENDING', ?, ?)
+        INSERT INTO orders (token_no, customer_name, customer_desk, customer_phone, customer_utr, payment_method, payment_status, status, total_amount, order_type)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?)
       `).run(
         tokenNo,
         cleanCustomerName,
         cleanCustomerDesk,
         cleanCustomerPhone,
+        cleanCustomerUtr,
         finalPaymentMethod,
         finalPaymentStatus,
         calculatedTotal,
@@ -438,10 +452,10 @@ app.post('/api/orders', async (req, res) => {
         }
       }
 
-      return orderId;
+      return { orderId, tokenNo };
     });
 
-    const orderId = createOrderTransaction();
+    const { orderId, tokenNo } = createOrderTransaction();
     const createdOrder = getOrderWithItems(orderId);
 
     if (finalPaymentMethod === 'CREDIT') {
@@ -486,8 +500,8 @@ app.get('/api/orders/:id', async (req, res) => {
   res.json({ ...order, upi: upiData });
 });
 
-// PATCH /api/orders/:id/status - Progress Order (Pending -> Preparing -> Ready -> Completed)
-app.patch('/api/orders/:id/status', (req, res) => {
+// PATCH /api/orders/:id/status - Progress Order (Requires Operator Auth)
+app.patch('/api/orders/:id/status', requireOperatorAuth, (req, res) => {
   const id = parseInt(req.params.id, 10);
   const { status, payment_status } = req.body;
 
@@ -541,8 +555,8 @@ app.get('/api/credit/accounts', (req, res) => {
   res.json(accounts);
 });
 
-// POST /api/credit/accounts - Add or update a customer credit profile
-app.post('/api/credit/accounts', (req, res) => {
+// POST /api/credit/accounts - Add or update a customer credit profile (Requires Operator Auth)
+app.post('/api/credit/accounts', requireOperatorAuth, (req, res) => {
   const { customer_name, phone, desk, notes } = req.body;
   if (!customer_name || !customer_name.trim()) {
     return res.status(400).json({ error: 'Customer name is required' });
@@ -604,8 +618,8 @@ app.get('/api/credit/accounts/:name', (req, res) => {
   });
 });
 
-// POST /api/credit/settle - Settle/pay credit balance
-app.post('/api/credit/settle', (req, res) => {
+// POST /api/credit/settle - Settle/pay credit balance (Requires Operator Auth)
+app.post('/api/credit/settle', requireOperatorAuth, (req, res) => {
   const { customer_name, amount, payment_method, notes } = req.body;
   const settleAmount = parseFloat(amount);
   if (!customer_name || isNaN(settleAmount) || settleAmount <= 0) {
@@ -656,7 +670,7 @@ app.get('/api/credit/stats', (req, res) => {
   const settledWeek = db.prepare(`
     SELECT COALESCE(SUM(amount_paid), 0) as total 
     FROM credit_settlements 
-    WHERE date(settled_at, 'localtime') >= date('now', 'localtime', '-7 days')
+    WHERE date(settled_at, '+5 hours', '+30 minutes') >= date('now', '+5 hours', '+30 minutes', '-7 days')
   `).get().total;
   const recentSettlements = db.prepare(`
     SELECT * FROM credit_settlements 
@@ -716,3 +730,9 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`[Server] BMU Canteen Server listening on 0.0.0.0:${PORT}`);
   console.log(`[Server] URL: http://0.0.0.0:${PORT}`);
 });
+
+module.exports = {
+  app,
+  server,
+  requireOperatorAuth
+};

@@ -7,6 +7,7 @@ import {
 import confetti from 'canvas-confetti';
 import { playOrderReadySound } from '../utils/audio';
 import UpiModal from '../components/UpiModal';
+import UpiPaymentButtons from '../components/UpiPaymentButtons';
 import socket from '../services/socket';
 
 export default function CustomerMenu({ 
@@ -32,6 +33,7 @@ export default function CustomerMenu({
   const [customerName, setCustomerName] = useState(() => localStorage.getItem('bmu_customer_name') || '');
   const [customerDesk, setCustomerDesk] = useState(() => localStorage.getItem('bmu_customer_desk') || '');
   const [customerPhone, setCustomerPhone] = useState(() => localStorage.getItem('bmu_customer_phone') || '');
+  const [customerUtr, setCustomerUtr] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('UPI'); // 'UPI', 'CREDIT', 'CASH'
   const [submittingOrder, setSubmittingOrder] = useState(false);
   const [showUpiModal, setShowUpiModal] = useState(false);
@@ -197,6 +199,7 @@ export default function CustomerMenu({
         customer_name: customerName.trim(),
         customer_desk: customerDesk.trim(),
         customer_phone: customerPhone.trim(),
+        customer_utr: customerUtr.trim(),
         payment_method: paymentMethod,
         order_type: 'ONLINE',
         payment_status: (paymentMethod === 'CREDIT' || paymentMethod === 'CASH') ? 'PENDING' : 'PAID',
@@ -788,19 +791,30 @@ export default function CustomerMenu({
                                 Exact Amount: <span className="text-emerald-700">₹{cartSubtotal}</span>
                               </p>
 
-                              {upiPreview.upiUri && (
-                                <a
-                                  href={upiPreview.upiUri}
-                                  className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-white bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 px-3.5 py-2 rounded-xl shadow transition-all active:scale-95"
-                                >
-                                  ⚡ Tap to Pay via UPI App
-                                </a>
-                              )}
+                              <UpiPaymentButtons 
+                                upiUri={upiPreview.upiUri} 
+                                upiId={upiPreview.upiId} 
+                                amount={cartSubtotal} 
+                              />
 
                               <p className="text-[11px] text-slate-500 mt-2">
-                                <strong>Step 1:</strong> Scan QR code with Google Pay / PhonePe / Paytm.<br />
-                                <strong>Step 2:</strong> Once payment succeeds, click green button below!
+                                <strong>Step 1:</strong> Pay ₹{cartSubtotal} using buttons above or scan QR code.<br />
+                                <strong>Step 2:</strong> Enter 12-digit UTR below & click Place Order!
                               </p>
+
+                              <div className="mt-2.5 text-left">
+                                <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                                  UPI Reference / UTR No. <span className="text-slate-400 font-normal">(12-digit Ref from app)</span>
+                                </label>
+                                <input
+                                  type="text"
+                                  maxLength={20}
+                                  placeholder="e.g. 423501987123"
+                                  value={customerUtr}
+                                  onChange={(e) => setCustomerUtr(e.target.value)}
+                                  className="w-full px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-mono-code focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white text-slate-900"
+                                />
+                              </div>
                             </div>
                           ) : null}
                         </div>

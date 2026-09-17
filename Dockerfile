@@ -10,8 +10,8 @@ RUN npm run build
 FROM node:20-alpine
 WORKDIR /app
 
-# Install build tools needed for native SQLite on Alpine
-RUN apk add --no-cache python3 make g++
+# Install build tools and timezone data needed for native SQLite on Alpine
+RUN apk add --no-cache python3 make g++ tzdata
 
 # Install backend dependencies
 COPY package*.json ./
@@ -22,6 +22,7 @@ COPY server/ ./server/
 COPY --from=frontend-builder /app/client/dist ./client/dist
 
 ENV NODE_ENV=production
+ENV TZ=Asia/Kolkata
 ENV PORT=5000
 EXPOSE 5000
 

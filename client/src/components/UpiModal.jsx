@@ -1,5 +1,6 @@
 import React from 'react';
-import { X, CheckCircle, ExternalLink, QrCode, ShieldCheck } from 'lucide-react';
+import { X, CheckCircle, QrCode, ShieldCheck } from 'lucide-react';
+import UpiPaymentButtons from './UpiPaymentButtons';
 
 export default function UpiModal({ upiData, order, onClose, onConfirmPaid }) {
   if (!upiData || !order) return null;
@@ -49,16 +50,12 @@ export default function UpiModal({ upiData, order, onClose, onConfirmPaid }) {
             Accepts GPay, PhonePe, Paytm, BHIM & any UPI App
           </p>
 
-          {/* Mobile Direct Intent Button (If on mobile phone) */}
-          {upiData.upiUri && (
-            <a
-              href={upiData.upiUri}
-              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-orange-50 hover:bg-orange-100 text-orange-700 font-semibold text-xs transition-colors border border-orange-200/80"
-            >
-              <span>Open in UPI App on this phone</span>
-              <ExternalLink className="w-3.5 h-3.5" />
-            </a>
-          )}
+          {/* Smart Mobile/Desktop Launch & Copy Buttons */}
+          <UpiPaymentButtons 
+            upiUri={upiData.upiUri} 
+            upiId={upiData.upiId || 'bmucanteen@upi'} 
+            amount={order.total_amount} 
+          />
 
           {/* Confirm Button */}
           <button

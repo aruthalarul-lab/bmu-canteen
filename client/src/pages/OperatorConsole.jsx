@@ -39,9 +39,22 @@ export default function OperatorConsole() {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     return sessionStorage.getItem('bmu_operator_auth') === 'true';
   });
+  const [operatorPin, setOperatorPin] = useState(() => {
+    return sessionStorage.getItem('bmu_operator_pin') || '1513';
+  });
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState('');
   const [verifyingPin, setVerifyingPin] = useState(false);
+
+  // Authenticated fetch helper for operator actions
+  const operatorFetch = (url, options = {}) => {
+    const pin = operatorPin || sessionStorage.getItem('bmu_operator_pin') || '1513';
+    const headers = {
+      ...(options.headers || {}),
+      'x-operator-pin': pin,
+    };
+    return fetch(url, { ...options, headers });
+  };
 
   // Credit / Khata Ledger State
   const [creditAccounts, setCreditAccounts] = useState([]);
@@ -87,7 +100,7 @@ export default function OperatorConsole() {
     }
     setAddingItem(true);
     try {
-      const res = await fetch('/api/menu', {
+      const res = await operatorFetch('/api/menu', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newItem),
@@ -155,7 +168,7 @@ export default function OperatorConsole() {
     }
     setUpdatingItem(true);
     try {
-      const res = await fetch(`/api/menu/${editingItem.id}`, {
+      const res = await operatorFetch(`/api/menu/${editingItem.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editItemForm),
@@ -179,7 +192,7 @@ export default function OperatorConsole() {
     if (!confirm('Are you sure you want to permanently delete this item from the menu?')) return;
     setDeletingItem(true);
     try {
-      const res = await fetch(`/api/menu/${itemId}`, { method: 'DELETE' });
+      const res = await operatorFetch(`/api/menu/${itemId}`, { method: 'DELETE' });
       if (res.ok) {
         setMenuItems(prev => prev.filter(i => i.id !== itemId));
         setEditingItem(null);
@@ -208,7 +221,10 @@ export default function OperatorConsole() {
       });
       const data = await res.json();
       if (res.ok && data.success) {
+        const pinVal = pinInput.trim();
         sessionStorage.setItem('bmu_operator_auth', 'true');
+        sessionStorage.setItem('bmu_operator_pin', pinVal);
+        setOperatorPin(pinVal);
         setIsAuthenticated(true);
         setPinInput('');
       } else {
@@ -224,6 +240,8 @@ export default function OperatorConsole() {
 
   const handleLockConsole = () => {
     sessionStorage.removeItem('bmu_operator_auth');
+    sessionStorage.removeItem('bmu_operator_pin');
+    setOperatorPin('');
     setIsAuthenticated(false);
     setPinInput('');
   };
@@ -265,7 +283,7 @@ export default function OperatorConsole() {
     }
     setSettling(true);
     try {
-      const res = await fetch('/api/credit/settle', {
+      const res = await operatorFetch('/api/credit/settle', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -303,7 +321,7 @@ export default function OperatorConsole() {
     }
     setAddingCustomer(true);
     try {
-      const res = await fetch('/api/credit/accounts', {
+      const res = await operatorFetch('/api/credit/accounts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newCustomer)
@@ -425,7 +443,7 @@ export default function OperatorConsole() {
     else if (currentStatus === 'READY') nextStatus = 'COMPLETED';
 
     try {
-      const res = await fetch(`/api/orders/${orderId}/status`, {
+      const res = await operatorFetch(`/api/orders/${orderId}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: nextStatus, payment_status: paymentStatus }),
@@ -441,7 +459,7 @@ export default function OperatorConsole() {
   const cancelOrder = async (orderId, tokenNo) => {
     if (!window.confirm(`Are you sure you want to cancel Token #${tokenNo}? This will immediately remove it from active queue.`)) return;
     try {
-      const res = await fetch(`/api/orders/${orderId}/status`, {
+      const res = await operatorFetch(`/api/orders/${orderId}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'CANCELLED' }),
@@ -457,7 +475,7 @@ export default function OperatorConsole() {
   // Mark Cash as Paid
   const markPaymentPaid = async (orderId) => {
     try {
-      await fetch(`/api/orders/${orderId}/status`, {
+      await operatorFetch(`/api/orders/${orderId}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ payment_status: 'PAID' }),
@@ -472,7 +490,7 @@ export default function OperatorConsole() {
     try {
       // Optimistic UI update
       setMenuItems(prev => prev.map(i => i.id === itemId ? { ...i, is_available: i.is_available === 1 ? 0 : 1 } : i));
-      await fetch(`/api/menu/${itemId}/toggle-stock`, { method: 'PATCH' });
+      await operatorFetch(`/api/menu/${itemId}/toggle-stock`, { method: 'PATCH' });
     } catch (err) {
       console.error(err);
       loadData();
@@ -555,7 +573,7 @@ export default function OperatorConsole() {
     e.preventDefault();
     setSettingsSaving(true);
     try {
-      const res = await fetch('/api/settings', {
+      const res = await operatorFetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings),
@@ -975,6 +993,11 @@ export default function OperatorConsole() {
                               📋 Staff Khata Tab
                             </span>
                           )}
+                          {order.customer_utr && (
+                            <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-mono-code font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                              UTR: {order.customer_utr}
+                            </span>
+                          )}
                         </div>
 
                         {/* Payment Status Badge */}
@@ -1078,6 +1101,11 @@ export default function OperatorConsole() {
                           {order.payment_method === 'CREDIT' && (
                             <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-800">
                               📋 Staff Khata Tab
+                            </span>
+                          )}
+                          {order.customer_utr && (
+                            <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-mono-code font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                              UTR: {order.customer_utr}
                             </span>
                           )}
                         </div>

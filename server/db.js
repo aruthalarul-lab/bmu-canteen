@@ -2,7 +2,7 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 
-const dbPath = path.join(__dirname, '..', 'canteen.db');
+const dbPath = process.env.DB_PATH || path.join(__dirname, '..', 'canteen.db');
 const db = new Database(dbPath);
 
 // Enable WAL mode for better concurrency
@@ -86,6 +86,11 @@ function initDb() {
   // Safe migrations for existing databases
   try {
     db.exec("ALTER TABLE orders ADD COLUMN customer_phone TEXT DEFAULT ''");
+  } catch (e) {
+    // Column already exists
+  }
+  try {
+    db.exec("ALTER TABLE orders ADD COLUMN customer_utr TEXT DEFAULT ''");
   } catch (e) {
     // Column already exists
   }
@@ -186,12 +191,12 @@ function initDb() {
   }
 }
 
-// Generate the next daily token number
+// Generate the next daily token number (uses IST offset +5:30 so tokens reset at midnight IST)
 function getNextTokenNumber() {
   const row = db.prepare(`
     SELECT MAX(token_no) as max_token 
     FROM orders 
-    WHERE date(created_at, 'localtime') = date('now', 'localtime')
+    WHERE date(created_at, '+5 hours', '+30 minutes') = date('now', '+5 hours', '+30 minutes')
   `).get();
 
   return (row && row.max_token) ? row.max_token + 1 : 1;

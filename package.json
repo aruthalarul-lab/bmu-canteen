@@ -6,7 +6,8 @@
     "start": "node server/server.js",
     "server": "node server/server.js",
     "client": "npm --prefix client run dev",
-    "build": "npm --prefix client run build"
+    "build": "npm --prefix client run build",
+    "test": "node test/test-suite.js"
   },
   "keywords": ["canteen", "pos", "kds", "upi-qr"],
   "author": "",
