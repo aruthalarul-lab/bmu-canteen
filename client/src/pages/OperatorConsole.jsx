@@ -1668,14 +1668,25 @@ export default function OperatorConsole() {
                     Place this QR barcode on dining tables or at the counter so customers can scan and order.
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setShowQrStandeeModal(true)}
-                  className="px-4 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-bold text-xs shadow-md shadow-orange-500/20 transition-all flex items-center gap-1.5 shrink-0 self-start sm:self-auto"
-                >
-                  <Printer className="w-4 h-4" />
-                  <span>Print Standee</span>
-                </button>
+                <div className="flex flex-wrap gap-2 shrink-0 self-start sm:self-auto">
+                  <a
+                    href="/how-to-order.html"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-800 font-bold text-xs transition-all flex items-center gap-1.5"
+                  >
+                    <FileText className="w-4 h-4 text-orange-500" />
+                    <span>Customer Guide Poster (A4)</span>
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => setShowQrStandeeModal(true)}
+                    className="px-4 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-bold text-xs shadow-md shadow-orange-500/20 transition-all flex items-center gap-1.5"
+                  >
+                    <Printer className="w-4 h-4" />
+                    <span>Print Standee</span>
+                  </button>
+                </div>
               </div>
 
               <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex flex-col sm:flex-row items-center gap-4">
@@ -2528,6 +2539,15 @@ export default function OperatorConsole() {
                   >
                     <Download className="w-3.5 h-3.5" />
                     <span>SVG</span>
+                  </a>
+                  <a
+                    href="/how-to-order.html"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-2 rounded-xl bg-orange-50 hover:bg-orange-100 border border-orange-200 text-xs font-bold text-orange-800 transition-colors flex items-center gap-1.5 shadow-sm"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-orange-600" />
+                    <span>Full Customer Poster (A4)</span>
                   </a>
                 </div>
 

@@ -152,6 +152,15 @@ export default function Navbar({ currentView, setView, cartCount, setIsCartOpen,
               </button>
             </div>
 
+            <a
+              href="/how-to-order.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-1.5 text-xs font-bold text-orange-600 hover:text-orange-700 hover:underline pt-1"
+            >
+              <span>📄 View Printable Customer Step-by-Step Guide</span>
+            </a>
+
             <button
               onClick={() => setShowQrModal(false)}
               className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-black text-white font-bold text-xs transition-all"
