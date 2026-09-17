@@ -122,6 +122,29 @@ app.get('/api/qr/site', async (req, res) => {
   }
 });
 
+// GET /api/qr/upi-preview - Generate UPI URI & QR Code before placing order
+app.get('/api/qr/upi-preview', async (req, res) => {
+  try {
+    const amount = parseFloat(req.query.amount) || 0;
+    const settings = getSettingsObj();
+    const upiId = settings.upi_id || 'bmucanteen@upi';
+    const upiName = settings.upi_name || 'BMU Canteen';
+    const encodedName = encodeURIComponent(upiName);
+    const upiUri = `upi://pay?pa=${upiId}&pn=${encodedName}&am=${Number(amount).toFixed(2)}&cu=INR&tn=BMU_Canteen_Order`;
+    
+    const qrDataUrl = await QRCode.toDataURL(upiUri, {
+      width: 320,
+      margin: 1,
+      color: { dark: '#0f172a', light: '#ffffff' },
+    });
+
+    res.json({ upiUri, qrDataUrl, upiId, upiName, amount });
+  } catch (err) {
+    console.error('UPI preview generation error:', err);
+    res.status(500).json({ error: 'Failed to generate UPI QR' });
+  }
+});
+
 // POST /api/operator/verify-pin - Secure Operator Console Access
 app.post('/api/operator/verify-pin', (req, res) => {
   const { pin } = req.body;
@@ -226,11 +249,13 @@ function getOrderWithItems(orderId) {
   return { ...order, items };
 }
 
-// GET /api/orders/active - Pending, Preparing, Ready
+// GET /api/orders/active - Pending, Preparing, Ready (Excludes cancelled and unpaid orders)
 app.get('/api/orders/active', (req, res) => {
   const orders = db.prepare(`
     SELECT * FROM orders 
     WHERE status IN ('PENDING', 'PREPARING', 'READY')
+      AND status != 'CANCELLED'
+      AND (payment_status = 'PAID' OR payment_method = 'CREDIT' OR order_type = 'COUNTER')
     ORDER BY CASE status 
       WHEN 'READY' THEN 1 
       WHEN 'PREPARING' THEN 2 
@@ -300,10 +325,43 @@ app.get('/api/orders/stats', (req, res) => {
 // POST /api/orders - Place Order (Online or Counter Fast-POS)
 app.post('/api/orders', async (req, res) => {
   try {
-    const { customer_name, customer_desk, payment_method, order_type, items } = req.body;
+    const { customer_name, customer_desk, customer_phone, payment_method, payment_status, order_type, items } = req.body;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'Order must contain at least one item' });
+    }
+
+    // 1. Customer Name is compulsory
+    if (!customer_name || !customer_name.trim()) {
+      return res.status(400).json({ error: 'Customer Name is compulsory.' });
+    }
+
+    const finalPaymentMethod = payment_method === 'CASH' ? 'CASH' : payment_method === 'CREDIT' ? 'CREDIT' : 'UPI';
+    const finalOrderType = order_type === 'COUNTER' ? 'COUNTER' : 'ONLINE';
+
+    // 2. Student / Employee / Desk ID is compulsory for online orders
+    if (finalOrderType === 'ONLINE' && (!customer_desk || !customer_desk.trim())) {
+      return res.status(400).json({ error: 'Student / Employee / Desk ID is compulsory.' });
+    }
+
+    // 3. For Staff Credit, mobile number is mandatory
+    if (finalPaymentMethod === 'CREDIT') {
+      const cleanPhone = (customer_phone || '').trim().replace(/\D/g, '');
+      if (cleanPhone.length < 10) {
+        return res.status(400).json({ error: 'Mobile number (minimum 10 digits) is mandatory for Staff Credit.' });
+      }
+    }
+
+    // 4. For online UPI orders, payment status must be completed (PAID) before placing order
+    if (finalOrderType === 'ONLINE' && finalPaymentMethod === 'UPI') {
+      if (payment_status !== 'PAID') {
+        return res.status(400).json({ error: 'Payment status must be completed before placing order.' });
+      }
+    }
+
+    // 5. For online orders, Cash payments must be made at the counter POS
+    if (finalOrderType === 'ONLINE' && finalPaymentMethod === 'CASH') {
+      return res.status(400).json({ error: 'Cash payments must be made directly at Counter 1 POS.' });
     }
 
     // Calculate total and prepare items
@@ -333,23 +391,23 @@ app.post('/api/orders', async (req, res) => {
     }
 
     const tokenNo = getNextTokenNumber();
-    const finalPaymentMethod = payment_method === 'CASH' ? 'CASH' : payment_method === 'CREDIT' ? 'CREDIT' : 'UPI';
-    // For counter POS orders, payment can be marked PAID directly if cashier took cash/UPI; credit is always PENDING
-    const paymentStatus = (finalPaymentMethod === 'CREDIT') ? 'PENDING' : ((order_type === 'COUNTER' || req.body.payment_status === 'PAID') ? 'PAID' : 'PENDING');
-    const finalOrderType = order_type === 'COUNTER' ? 'COUNTER' : 'ONLINE';
-    const customerName = (customer_name && customer_name.trim()) || `Guest #${tokenNo}`;
+    const finalPaymentStatus = (finalPaymentMethod === 'CREDIT') ? 'PENDING' : 'PAID';
+    const cleanCustomerName = customer_name.trim();
+    const cleanCustomerDesk = customer_desk && customer_desk.trim() ? customer_desk.trim() : (finalOrderType === 'COUNTER' ? 'Counter 1 POS' : '');
+    const cleanCustomerPhone = customer_phone ? customer_phone.trim() : '';
 
     // Insert order in database transaction
     const createOrderTransaction = db.transaction(() => {
       const orderInsert = db.prepare(`
-        INSERT INTO orders (token_no, customer_name, customer_desk, payment_method, payment_status, status, total_amount, order_type)
-        VALUES (?, ?, ?, ?, ?, 'PENDING', ?, ?)
+        INSERT INTO orders (token_no, customer_name, customer_desk, customer_phone, payment_method, payment_status, status, total_amount, order_type)
+        VALUES (?, ?, ?, ?, ?, ?, 'PENDING', ?, ?)
       `).run(
         tokenNo,
-        customerName,
-        customer_desk || '',
+        cleanCustomerName,
+        cleanCustomerDesk,
+        cleanCustomerPhone,
         finalPaymentMethod,
-        paymentStatus,
+        finalPaymentStatus,
         calculatedTotal,
         finalOrderType
       );
@@ -366,20 +424,21 @@ app.post('/api/orders', async (req, res) => {
 
       // If placed on Credit / Khata, automatically update customer credit account
       if (finalPaymentMethod === 'CREDIT') {
-        const existingAcc = db.prepare('SELECT * FROM credit_accounts WHERE LOWER(customer_name) = LOWER(?)').get(customerName);
+        const existingAcc = db.prepare('SELECT * FROM credit_accounts WHERE LOWER(customer_name) = LOWER(?)').get(cleanCustomerName);
         if (existingAcc) {
           db.prepare(`
             UPDATE credit_accounts 
             SET balance = balance + ?, 
+                phone = CASE WHEN ? != '' THEN ? ELSE phone END,
                 desk = CASE WHEN ? != '' THEN ? ELSE desk END,
                 updated_at = CURRENT_TIMESTAMP 
             WHERE id = ?
-          `).run(calculatedTotal, customer_desk || '', customer_desk || '', existingAcc.id);
+          `).run(calculatedTotal, cleanCustomerPhone, cleanCustomerPhone, cleanCustomerDesk, cleanCustomerDesk, existingAcc.id);
         } else {
           db.prepare(`
-            INSERT INTO credit_accounts (customer_name, desk, balance) 
-            VALUES (?, ?, ?)
-          `).run(customerName, customer_desk || '', calculatedTotal);
+            INSERT INTO credit_accounts (customer_name, phone, desk, balance) 
+            VALUES (?, ?, ?, ?)
+          `).run(cleanCustomerName, cleanCustomerPhone, cleanCustomerDesk, calculatedTotal);
         }
       }
 
@@ -390,7 +449,7 @@ app.post('/api/orders', async (req, res) => {
     const createdOrder = getOrderWithItems(orderId);
 
     if (finalPaymentMethod === 'CREDIT') {
-      io.emit('credit-updated', { customer_name: customerName });
+      io.emit('credit-updated', { customer_name: cleanCustomerName });
     }
 
     // Generate UPI QR if payment is UPI
@@ -444,6 +503,18 @@ app.patch('/api/orders/:id/status', (req, res) => {
   const validStatuses = ['PENDING', 'PREPARING', 'READY', 'COMPLETED', 'CANCELLED'];
   const newStatus = status && validStatuses.includes(status) ? status : existing.status;
   const newPayStatus = payment_status ? payment_status : existing.payment_status;
+
+  // If order is cancelled, revert pending credit if it was charged to staff credit
+  if (newStatus === 'CANCELLED' && existing.status !== 'CANCELLED') {
+    if (existing.payment_method === 'CREDIT' && existing.payment_status === 'PENDING') {
+      db.prepare(`
+        UPDATE credit_accounts 
+        SET balance = MAX(0, balance - ?) 
+        WHERE LOWER(customer_name) = LOWER(?)
+      `).run(existing.total_amount, existing.customer_name);
+      io.emit('credit-updated', { customer_name: existing.customer_name });
+    }
+  }
 
   db.prepare(`
     UPDATE orders 

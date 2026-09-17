@@ -28,6 +28,8 @@ export default function PublicDisplay() {
     }, 10000);
 
     const handleNew = (order) => {
+      if (order.status === 'CANCELLED') return;
+      if (order.payment_status !== 'PAID' && order.payment_method !== 'CREDIT' && order.order_type !== 'COUNTER') return;
       setOrders(prev => [order, ...prev.filter(o => o.id !== order.id)]);
     };
 
@@ -54,8 +56,8 @@ export default function PublicDisplay() {
     };
   }, [soundEnabled]);
 
-  const preparing = orders.filter(o => o.status === 'PREPARING' || o.status === 'PENDING');
-  const ready = orders.filter(o => o.status === 'READY');
+  const preparing = orders.filter(o => (o.status === 'PREPARING' || o.status === 'PENDING') && o.status !== 'CANCELLED' && (o.payment_status === 'PAID' || o.payment_method === 'CREDIT' || o.order_type === 'COUNTER'));
+  const ready = orders.filter(o => o.status === 'READY' && o.status !== 'CANCELLED');
 
   return (
     <div className="min-h-screen bg-slate-950 text-white flex flex-col p-6 sm:p-10 select-none">

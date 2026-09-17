@@ -36,6 +36,7 @@ function initDb() {
       token_no INTEGER NOT NULL,
       customer_name TEXT NOT NULL,
       customer_desk TEXT,
+      customer_phone TEXT DEFAULT '',
       payment_method TEXT NOT NULL, -- 'UPI' or 'CASH'
       payment_status TEXT NOT NULL, -- 'PAID', 'PENDING'
       status TEXT NOT NULL DEFAULT 'PENDING', -- 'PENDING', 'PREPARING', 'READY', 'COMPLETED', 'CANCELLED'
@@ -81,6 +82,13 @@ function initDb() {
       settled_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);
+
+  // Safe migrations for existing databases
+  try {
+    db.exec("ALTER TABLE orders ADD COLUMN customer_phone TEXT DEFAULT ''");
+  } catch (e) {
+    // Column already exists
+  }
 
   // Initialize default settings if missing
   const insertSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');

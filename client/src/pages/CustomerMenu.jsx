@@ -31,10 +31,13 @@ export default function CustomerMenu({
   // Customer Details Form
   const [customerName, setCustomerName] = useState(() => localStorage.getItem('bmu_customer_name') || '');
   const [customerDesk, setCustomerDesk] = useState(() => localStorage.getItem('bmu_customer_desk') || '');
-  const [paymentMethod, setPaymentMethod] = useState('UPI'); // 'UPI' or 'CASH'
+  const [customerPhone, setCustomerPhone] = useState(() => localStorage.getItem('bmu_customer_phone') || '');
+  const [paymentMethod, setPaymentMethod] = useState('UPI'); // 'UPI', 'CREDIT', 'CASH'
   const [submittingOrder, setSubmittingOrder] = useState(false);
   const [showUpiModal, setShowUpiModal] = useState(false);
   const [completedNotice, setCompletedNotice] = useState(null);
+  const [upiPreview, setUpiPreview] = useState(null);
+  const [loadingUpiPreview, setLoadingUpiPreview] = useState(false);
 
   // Fetch menu on load
   const fetchMenu = async () => {
@@ -134,13 +137,57 @@ export default function CustomerMenu({
     return matchesCategory && matchesSearch && matchesDiet;
   });
 
+  // Fetch UPI preview QR when drawer is open and UPI is selected
+  useEffect(() => {
+    if (isCartOpen && cartSubtotal > 0 && paymentMethod === 'UPI') {
+      let isCurrent = true;
+      setLoadingUpiPreview(true);
+      fetch(`/api/qr/upi-preview?amount=${cartSubtotal}`)
+        .then(r => r.json())
+        .then(data => {
+          if (isCurrent) {
+            setUpiPreview(data);
+            setLoadingUpiPreview(false);
+          }
+        })
+        .catch(err => {
+          console.error('Failed to load UPI QR preview:', err);
+          if (isCurrent) setLoadingUpiPreview(false);
+        });
+      return () => { isCurrent = false; };
+    }
+  }, [isCartOpen, cartSubtotal, paymentMethod]);
+
   // Handle Checkout Submission
   const handlePlaceOrder = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     if (cart.length === 0) return;
+
+    // 1. Customer Name is compulsory
     if (!customerName.trim()) {
-      alert('Please enter your name so the counter can identify your order.');
+      alert('⚠️ Name is compulsory! Please enter your Full Name.');
       return;
+    }
+
+    // 2. Student / Employee / Desk ID is compulsory
+    if (!customerDesk.trim()) {
+      alert('⚠️ ID is compulsory! Please enter your Student / Employee / Desk ID.');
+      return;
+    }
+
+    // 3. Online orders do not accept Cash
+    if (paymentMethod === 'CASH') {
+      alert('💵 Cash payments must be placed and paid directly at Counter 1 Cashier.');
+      return;
+    }
+
+    // 4. For Staff Credit, mobile number is mandatory
+    if (paymentMethod === 'CREDIT') {
+      const cleanPhone = customerPhone.trim().replace(/\D/g, '');
+      if (cleanPhone.length < 10) {
+        alert('📞 Mobile number (minimum 10 digits) is mandatory for Staff Credit (Weekly Tab).');
+        return;
+      }
     }
 
     setSubmittingOrder(true);
@@ -148,12 +195,17 @@ export default function CustomerMenu({
     try {
       localStorage.setItem('bmu_customer_name', customerName.trim());
       localStorage.setItem('bmu_customer_desk', customerDesk.trim());
+      if (customerPhone.trim()) {
+        localStorage.setItem('bmu_customer_phone', customerPhone.trim());
+      }
 
       const payload = {
         customer_name: customerName.trim(),
         customer_desk: customerDesk.trim(),
+        customer_phone: customerPhone.trim(),
         payment_method: paymentMethod,
         order_type: 'ONLINE',
+        payment_status: paymentMethod === 'CREDIT' ? 'PENDING' : 'PAID',
         items: cart.map(item => ({
           menu_item_id: item.id,
           quantity: item.quantity,
@@ -179,15 +231,10 @@ export default function CustomerMenu({
 
       // Trigger celebratory confetti
       confetti({
-        particleCount: 50,
-        spread: 60,
+        particleCount: 60,
+        spread: 70,
         origin: { y: 0.7 }
       });
-
-      // If UPI, trigger the payment QR modal
-      if (orderData.payment_method === 'UPI' && orderData.upi) {
-        setShowUpiModal(true);
-      }
     } catch (err) {
       console.error('Order submission error:', err);
       alert('Network error placing order. Please check connection.');
@@ -623,12 +670,12 @@ export default function CustomerMenu({
                 {cart.length > 0 && (
                   <div className="pt-4 border-t border-slate-200 space-y-3">
                     <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                      Pickup Information
+                      Customer & Pickup Information
                     </h3>
 
                     <div>
-                      <label className="text-xs font-semibold text-slate-700 block mb-1">
-                        Your Name / ID *
+                      <label className="text-xs font-bold text-slate-700 block mb-1">
+                        Full Name <span className="text-red-500">*</span>
                       </label>
                       <div className="relative">
                         <User className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -644,14 +691,15 @@ export default function CustomerMenu({
                     </div>
 
                     <div>
-                      <label className="text-xs font-semibold text-slate-700 block mb-1">
-                        Desk / Department (Optional)
+                      <label className="text-xs font-bold text-slate-700 block mb-1">
+                        Student / Employee / Desk ID <span className="text-red-500">*</span>
                       </label>
                       <div className="relative">
                         <MapPin className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                         <input
                           type="text"
-                          placeholder="e.g. 2nd Floor Marketing"
+                          required
+                          placeholder="e.g. Roll No 23BMU042 / Staff ID 104"
                           value={customerDesk}
                           onChange={(e) => setCustomerDesk(e.target.value)}
                           className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none"
@@ -661,10 +709,10 @@ export default function CustomerMenu({
 
                     {/* Payment Method Selector */}
                     <div>
-                      <label className="text-xs font-semibold text-slate-700 block mb-1.5">
-                        Payment Method
+                      <label className="text-xs font-bold text-slate-700 block mb-1.5">
+                        Payment Method <span className="text-red-500">*</span>
                       </label>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <div className="grid grid-cols-3 gap-2">
                         <button
                           type="button"
                           onClick={() => setPaymentMethod('UPI')}
@@ -675,20 +723,7 @@ export default function CustomerMenu({
                           }`}
                         >
                           <span>⚡ UPI QR</span>
-                          <span className="text-[10px] font-normal text-slate-500 mt-0.5">Pay online</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setPaymentMethod('CASH')}
-                          className={`p-2.5 rounded-xl border text-xs font-bold flex flex-col items-center justify-center transition-all ${
-                            paymentMethod === 'CASH'
-                              ? 'bg-orange-50 border-orange-400 text-orange-700 ring-1 ring-orange-400 shadow-sm'
-                              : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                          }`}
-                        >
-                          <span>💵 Cash</span>
-                          <span className="text-[10px] font-normal text-slate-500 mt-0.5">Pay at counter</span>
+                          <span className="text-[10px] font-normal text-slate-500 mt-0.5">Pay Online</span>
                         </button>
 
                         <button
@@ -701,15 +736,117 @@ export default function CustomerMenu({
                           }`}
                         >
                           <span>📋 Staff Credit</span>
-                          <span className="text-[10px] font-normal text-slate-500 mt-0.5">Pay weekly tab</span>
+                          <span className="text-[10px] font-normal text-slate-500 mt-0.5">Weekly Tab</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setPaymentMethod('CASH')}
+                          className={`p-2.5 rounded-xl border text-xs font-bold flex flex-col items-center justify-center transition-all ${
+                            paymentMethod === 'CASH'
+                              ? 'bg-amber-50 border-amber-400 text-amber-700 ring-1 ring-amber-400 shadow-sm'
+                              : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                          }`}
+                        >
+                          <span>💵 Cash</span>
+                          <span className="text-[10px] font-normal text-slate-500 mt-0.5">Counter 1</span>
                         </button>
                       </div>
 
-                      {paymentMethod === 'CREDIT' && (
-                        <p className="text-[11px] text-indigo-700 bg-indigo-50 p-2.5 rounded-xl border border-indigo-100 mt-2">
-                          📋 <strong>Weekly Khata:</strong> This order (₹{cartSubtotal}) will be charged to your weekly staff account. Please verify your Name and Desk above.
-                        </p>
+                      {/* UPI QR Payment Block (Pay Before Submitting) */}
+                      {paymentMethod === 'UPI' && (
+                        <div className="mt-3 p-4 rounded-2xl bg-orange-50/60 border border-orange-200 text-center space-y-2.5 animate-fade-in">
+                          <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-orange-900">
+                            <Sparkles className="w-4 h-4 text-orange-500" />
+                            <span>Scan & Pay Before Placing Order</span>
+                          </div>
+
+                          {loadingUpiPreview ? (
+                            <div className="py-6 flex items-center justify-center text-xs text-slate-400">
+                              <RefreshCw className="w-4 h-4 animate-spin mr-2" />
+                              Generating Dynamic UPI QR...
+                            </div>
+                          ) : upiPreview ? (
+                            <div className="flex flex-col items-center">
+                              <div className="p-2 bg-white rounded-2xl shadow-sm border border-orange-200 inline-block">
+                                <img 
+                                  src={upiPreview.qrDataUrl} 
+                                  alt="UPI QR Code" 
+                                  className="w-40 h-40 sm:w-44 sm:h-44 object-contain rounded-xl"
+                                />
+                              </div>
+                              <p className="text-xs font-mono font-bold text-slate-700 mt-2">
+                                UPI: <span className="text-orange-700">{upiPreview.upiId}</span>
+                              </p>
+                              <p className="text-sm font-black text-slate-900">
+                                Exact Amount: <span className="text-emerald-700">₹{cartSubtotal}</span>
+                              </p>
+
+                              {upiPreview.upiUri && (
+                                <a
+                                  href={upiPreview.upiUri}
+                                  className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-white bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 px-3.5 py-2 rounded-xl shadow transition-all active:scale-95"
+                                >
+                                  ⚡ Tap to Pay via UPI App
+                                </a>
+                              )}
+
+                              <p className="text-[11px] text-slate-500 mt-2">
+                                <strong>Step 1:</strong> Scan QR code with Google Pay / PhonePe / Paytm.<br />
+                                <strong>Step 2:</strong> Once payment succeeds, click green button below!
+                              </p>
+                            </div>
+                          ) : null}
+                        </div>
                       )}
+
+                      {/* Staff Credit (Weekly Tab) - Mobile number mandatory */}
+                      {paymentMethod === 'CREDIT' && (
+                        <div className="mt-3 p-3.5 rounded-2xl bg-indigo-50 border border-indigo-200 text-xs text-indigo-900 space-y-2.5 animate-fade-in">
+                          <div className="font-bold flex items-center gap-1.5 text-indigo-800">
+                            <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0" />
+                            <span>Staff Credit (Weekly Khata Tab)</span>
+                          </div>
+                          <p className="text-indigo-700 leading-tight">
+                            This order (₹{cartSubtotal}) will be charged to your weekly staff account.
+                          </p>
+
+                          <div>
+                            <label className="text-xs font-bold text-slate-700 block mb-1">
+                              Mobile Number <span className="text-red-500">*</span> (Mandatory for Weekly Tab)
+                            </label>
+                            <div className="relative">
+                              <Phone className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                              <input
+                                type="tel"
+                                required
+                                maxLength={15}
+                                placeholder="10-digit mobile number (e.g. 9876543210)"
+                                value={customerPhone}
+                                onChange={(e) => setCustomerPhone(e.target.value)}
+                                className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Cash Payment Notice */}
+                      {paymentMethod === 'CASH' && (
+                        <div className="mt-3 p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-900 space-y-2 animate-fade-in">
+                          <div className="font-bold flex items-center gap-1.5 text-amber-800">
+                            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                            <span>Cash Orders at Counter 1 Only</span>
+                          </div>
+                          <p className="text-slate-600 leading-tight">
+                            To ensure food is prepared only for verified orders, cash payments must be made in person.
+                          </p>
+                          <div className="bg-white p-2 rounded-xl border border-amber-200 font-semibold text-amber-900">
+                            👉 Please visit <strong>Counter 1 Cashier</strong> to place and pay for your cash order directly.
+                          </div>
+                        </div>
+                      )}
+
                     </div>
                   </div>
                 )}
@@ -719,27 +856,55 @@ export default function CustomerMenu({
               {cart.length > 0 && (
                 <div className="p-5 border-t border-slate-200 bg-slate-50 space-y-3">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-slate-600">To Pay</span>
+                    <span className="text-slate-600 font-medium">To Pay</span>
                     <span className="text-xl font-extrabold text-slate-900">₹{cartSubtotal}</span>
                   </div>
 
-                  <button
-                    onClick={handlePlaceOrder}
-                    disabled={submittingOrder}
-                    className="w-full py-3.5 px-4 rounded-2xl bg-orange-500 hover:bg-orange-600 active:scale-98 disabled:opacity-50 text-white font-extrabold text-sm shadow-lg shadow-orange-500/25 transition-all flex items-center justify-center space-x-2"
-                  >
-                    {submittingOrder ? (
-                      <>
-                        <RefreshCw className="w-4 h-4 animate-spin" />
-                        <span>Generating Token...</span>
-                      </>
-                    ) : (
-                      <>
-                        <span>Confirm & Get Token</span>
-                        <ArrowRight className="w-4 h-4" />
-                      </>
-                    )}
-                  </button>
+                  {paymentMethod === 'UPI' && (
+                    <button
+                      onClick={handlePlaceOrder}
+                      disabled={submittingOrder || !customerName.trim() || !customerDesk.trim()}
+                      className="w-full py-3.5 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 active:scale-98 disabled:opacity-50 text-white font-extrabold text-sm shadow-lg shadow-emerald-600/25 transition-all flex items-center justify-center space-x-2"
+                    >
+                      {submittingOrder ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          <span>Submitting Order...</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span>I Have Completed Payment (Place Order)</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+
+                  {paymentMethod === 'CREDIT' && (
+                    <button
+                      onClick={handlePlaceOrder}
+                      disabled={submittingOrder || !customerName.trim() || !customerDesk.trim() || customerPhone.replace(/\D/g, '').length < 10}
+                      className="w-full py-3.5 px-4 rounded-2xl bg-indigo-600 hover:bg-indigo-700 active:scale-98 disabled:opacity-50 text-white font-extrabold text-sm shadow-lg shadow-indigo-600/25 transition-all flex items-center justify-center space-x-2"
+                    >
+                      {submittingOrder ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          <span>Recording Staff Tab...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>Confirm Staff Credit Order</span>
+                          <ArrowRight className="w-4 h-4" />
+                        </>
+                      )}
+                    </button>
+                  )}
+
+                  {paymentMethod === 'CASH' && (
+                    <div className="w-full py-3 px-4 rounded-2xl bg-slate-200 text-slate-500 font-bold text-xs text-center">
+                      💵 Please Visit Counter 1 to Place Cash Order
+                    </div>
+                  )}
                 </div>
               )}
             </div>

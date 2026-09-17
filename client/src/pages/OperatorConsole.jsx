@@ -437,6 +437,23 @@ export default function OperatorConsole() {
     }
   };
 
+  // 1-Click Order Cancellation
+  const cancelOrder = async (orderId, tokenNo) => {
+    if (!window.confirm(`Are you sure you want to cancel Token #${tokenNo}? This will immediately remove it from active queue.`)) return;
+    try {
+      const res = await fetch(`/api/orders/${orderId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'CANCELLED' }),
+      });
+      if (!res.ok) throw new Error('Failed to cancel order');
+      setOrders(prev => prev.filter(o => o.id !== orderId));
+    } catch (err) {
+      console.error(err);
+      alert('Error cancelling order');
+    }
+  };
+
   // Mark Cash as Paid
   const markPaymentPaid = async (orderId) => {
     try {
@@ -492,6 +509,7 @@ export default function OperatorConsole() {
       const finalName = overrideName || posCustomerName.trim() || (payMethod === 'CREDIT' ? 'Credit Staff' : 'Counter Walk-in');
       const payload = {
         customer_name: finalName,
+        customer_desk: 'Counter 1 POS',
         payment_method: payMethod,
         order_type: 'COUNTER',
         payment_status: payMethod === 'CREDIT' ? 'PENDING' : 'PAID',
@@ -552,10 +570,10 @@ export default function OperatorConsole() {
     }
   };
 
-  // Partition active orders for Kanban
-  const pendingOrders = orders.filter(o => o.status === 'PENDING');
-  const preparingOrders = orders.filter(o => o.status === 'PREPARING');
-  const readyOrders = orders.filter(o => o.status === 'READY');
+  // Partition active orders for Kanban (strictly excludes cancelled & unpaid orders)
+  const pendingOrders = orders.filter(o => o.status === 'PENDING' && o.status !== 'CANCELLED' && (o.payment_status === 'PAID' || o.payment_method === 'CREDIT' || o.order_type === 'COUNTER'));
+  const preparingOrders = orders.filter(o => o.status === 'PREPARING' && o.status !== 'CANCELLED');
+  const readyOrders = orders.filter(o => o.status === 'READY' && o.status !== 'CANCELLED');
 
   // If not authenticated, show Operator PIN Gate
   if (!isAuthenticated) {
@@ -858,8 +876,18 @@ export default function OperatorConsole() {
                             </span>
                           </div>
                           {order.customer_desk && (
-                            <span className="text-[11px] text-slate-400 block mt-1">
-                              📍 {order.customer_desk}
+                            <span className="text-[11px] text-slate-600 font-medium block mt-1">
+                              🆔 {order.customer_desk}
+                            </span>
+                          )}
+                          {order.customer_phone && (
+                            <span className="text-[11px] text-indigo-700 font-medium block">
+                              📞 {order.customer_phone}
+                            </span>
+                          )}
+                          {order.payment_method === 'CREDIT' && (
+                            <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-800">
+                              📋 Staff Khata Tab
                             </span>
                           )}
                         </div>
@@ -869,6 +897,8 @@ export default function OperatorConsole() {
                           <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-bold ${
                             order.payment_method === 'UPI'
                               ? 'bg-orange-100 text-orange-800'
+                              : order.payment_method === 'CREDIT'
+                              ? 'bg-indigo-100 text-indigo-800'
                               : 'bg-emerald-100 text-emerald-800'
                           }`}>
                             {order.payment_method} • ₹{order.total_amount}
@@ -894,14 +924,24 @@ export default function OperatorConsole() {
                         ))}
                       </div>
 
-                      {/* Progression Button */}
-                      <button
-                        onClick={() => advanceOrderStatus(order.id, 'PENDING', order.payment_status)}
-                        className="w-full py-2.5 px-3 rounded-xl bg-amber-500 hover:bg-amber-600 active:scale-98 text-white font-bold text-xs shadow-sm transition-all flex items-center justify-center space-x-1.5"
-                      >
-                        <ChefHat className="w-4 h-4" />
-                        <span>Start Preparing</span>
-                      </button>
+                      {/* Progression & Cancel Buttons */}
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => cancelOrder(order.id, order.token_no)}
+                          className="py-2.5 px-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs border border-rose-200 transition-all flex items-center justify-center gap-1 shrink-0"
+                          title="Cancel Order"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                          <span>Cancel</span>
+                        </button>
+                        <button
+                          onClick={() => advanceOrderStatus(order.id, 'PENDING', order.payment_status)}
+                          className="flex-1 py-2.5 px-3 rounded-xl bg-amber-500 hover:bg-amber-600 active:scale-98 text-white font-bold text-xs shadow-sm transition-all flex items-center justify-center space-x-1.5"
+                        >
+                          <ChefHat className="w-4 h-4" />
+                          <span>Start Preparing</span>
+                        </button>
+                      </div>
                     </div>
                   ))
                 )}
@@ -941,8 +981,18 @@ export default function OperatorConsole() {
                             </span>
                           </div>
                           {order.customer_desk && (
-                            <span className="text-[11px] text-slate-400 block mt-1">
-                              📍 {order.customer_desk}
+                            <span className="text-[11px] text-slate-600 font-medium block mt-1">
+                              🆔 {order.customer_desk}
+                            </span>
+                          )}
+                          {order.customer_phone && (
+                            <span className="text-[11px] text-indigo-700 font-medium block">
+                              📞 {order.customer_phone}
+                            </span>
+                          )}
+                          {order.payment_method === 'CREDIT' && (
+                            <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-800">
+                              📋 Staff Khata Tab
                             </span>
                           )}
                         </div>
@@ -962,13 +1012,24 @@ export default function OperatorConsole() {
                         ))}
                       </div>
 
-                      <button
-                        onClick={() => advanceOrderStatus(order.id, 'PREPARING', order.payment_status)}
-                        className="w-full py-2.5 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-bold text-xs shadow-sm transition-all flex items-center justify-center space-x-1.5"
-                      >
-                        <Bell className="w-4 h-4" />
-                        <span>Ready for Pickup!</span>
-                      </button>
+                      {/* Progression & Cancel Buttons */}
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => cancelOrder(order.id, order.token_no)}
+                          className="py-2.5 px-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs border border-rose-200 transition-all flex items-center justify-center gap-1 shrink-0"
+                          title="Cancel Order"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                          <span>Cancel</span>
+                        </button>
+                        <button
+                          onClick={() => advanceOrderStatus(order.id, 'PREPARING', order.payment_status)}
+                          className="flex-1 py-2.5 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-bold text-xs shadow-sm transition-all flex items-center justify-center space-x-1.5"
+                        >
+                          <Bell className="w-4 h-4" />
+                          <span>Ready for Pickup!</span>
+                        </button>
+                      </div>
                     </div>
                   ))
                 )}
@@ -1012,6 +1073,21 @@ export default function OperatorConsole() {
                               </span>
                             </div>
                           </div>
+                          {order.customer_desk && (
+                            <span className="text-[11px] text-slate-600 font-medium block mt-1">
+                              🆔 {order.customer_desk}
+                            </span>
+                          )}
+                          {order.customer_phone && (
+                            <span className="text-[11px] text-indigo-700 font-medium block">
+                              📞 {order.customer_phone}
+                            </span>
+                          )}
+                          {order.payment_method === 'CREDIT' && (
+                            <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-800">
+                              📋 Staff Khata Tab
+                            </span>
+                          )}
                         </div>
 
                         {/* Cash Reminder Warning if unpaid */}
@@ -1040,13 +1116,24 @@ export default function OperatorConsole() {
                         ))}
                       </div>
 
-                      <button
-                        onClick={() => advanceOrderStatus(order.id, 'READY', 'PAID')}
-                        className="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white font-extrabold text-xs shadow-md transition-all flex items-center justify-center space-x-1.5"
-                      >
-                        <CheckCircle className="w-4 h-4" />
-                        <span>Hand Over Food (Done)</span>
-                      </button>
+                      {/* Progression & Cancel Buttons */}
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => cancelOrder(order.id, order.token_no)}
+                          className="py-2.5 px-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs border border-rose-200 transition-all flex items-center justify-center gap-1 shrink-0"
+                          title="Cancel Order"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                          <span>Cancel</span>
+                        </button>
+                        <button
+                          onClick={() => advanceOrderStatus(order.id, 'READY', 'PAID')}
+                          className="flex-1 py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white font-extrabold text-xs shadow-md transition-all flex items-center justify-center space-x-1.5"
+                        >
+                          <CheckCircle className="w-4 h-4" />
+                          <span>Hand Over Food (Done)</span>
+                        </button>
+                      </div>
                     </div>
                   ))
                 )}
