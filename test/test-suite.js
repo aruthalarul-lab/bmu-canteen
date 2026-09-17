@@ -273,6 +273,67 @@ async function runTests() {
     assert(uniqueTokens.size === 10, '10 simultaneous burst orders receive 10 unique consecutive token numbers',
       `Tokens: [${tokens.join(', ')}]`);
 
+    console.log('\n--- Suite 9: Credit Ledger Details, Department, Item Descriptions & Backup/Restore ---');
+    // 1. Register staff credit profile with Department and Phone
+    const addStaff = await request('POST', '/api/credit/accounts', {
+      customer_name: 'Prof. Verma',
+      department: 'Computer Science',
+      phone: '9876543210',
+      notes: 'HOD CSE'
+    }, { 'x-operator-pin': TEST_PIN });
+    assert(addStaff.status === 201 && addStaff.body.department === 'Computer Science' && addStaff.body.phone === '9876543210',
+      'Registers staff member with Name, Department, and Phone');
+
+    // 2. Place credit order for Prof. Verma
+    const creditOrderVerma = await request('POST', '/api/orders', {
+      customer_name: 'Prof. Verma',
+      customer_desk: 'Computer Science',
+      customer_phone: '9876543210',
+      payment_method: 'CREDIT',
+      items: [{ menu_item_id: testItemId, quantity: 2 }]
+    });
+    assert(creditOrderVerma.status === 201, 'Places credit order for registered staff member');
+
+    // 3. Query all credit accounts (Requirement 1: name, department, phone, due amount)
+    const allCreditAccounts = await request('GET', '/api/credit/accounts');
+    const vermaAcc = allCreditAccounts.body.find(a => a.customer_name === 'Prof. Verma');
+    assert(vermaAcc && vermaAcc.department === 'Computer Science' && vermaAcc.phone === '9876543210' && vermaAcc.balance > 0,
+      'GET /api/credit/accounts returns Name, Department, Phone, and Due Amount');
+
+    // 4. Query individual statement (Requirement 2: date, description of items, quantity, price)
+    const vermaStatement = await request('GET', `/api/credit/accounts/${encodeURIComponent('Prof. Verma')}`);
+    assert(vermaStatement.status === 200 && vermaStatement.body.orders.length > 0, 'GET /api/credit/accounts/:name returns statement');
+    const firstOrder = vermaStatement.body.orders[0];
+    assert(firstOrder.created_at && firstOrder.items && firstOrder.items.length > 0 &&
+           firstOrder.items[0].item_name && firstOrder.items[0].quantity === 2 && firstOrder.items[0].price > 0,
+      'Statement includes Order Date, Item Name/Description, Quantity, and Price');
+
+    // 5. Download Backup (Requirement 3: backup download)
+    const backupRes = await request('GET', '/api/credit/backup', null, { 'x-operator-pin': TEST_PIN });
+    assert(backupRes.status === 200 && backupRes.body.credit_accounts && backupRes.body.credit_accounts.length > 0,
+      'GET /api/credit/backup exports valid JSON ledger backup with accounts and orders');
+
+    // 6. Restore Backup (Requirement 3: backup upload)
+    const restorePayload = {
+      credit_accounts: [
+        {
+          customer_name: 'Restored Employee',
+          department: 'Civil Engg',
+          phone: '9123456780',
+          desk: 'Lab 2',
+          notes: 'Restored from backup test',
+          balance: 150
+        }
+      ]
+    };
+    const restoreRes = await request('POST', '/api/credit/restore', restorePayload, { 'x-operator-pin': TEST_PIN });
+    assert(restoreRes.status === 200 && restoreRes.body.success === true, 'POST /api/credit/restore imports/restores backup successfully');
+
+    const checkRestored = await request('GET', '/api/credit/accounts');
+    const restoredEmp = checkRestored.body.find(a => a.customer_name === 'Restored Employee');
+    assert(restoredEmp && restoredEmp.department === 'Civil Engg' && restoredEmp.balance === 150,
+      'Restored account is immediately active in credit ledger with correct department and balance');
+
   } finally {
     serverProcess.kill();
     setTimeout(() => {

@@ -4,7 +4,7 @@ import {
   Package, DollarSign, QrCode, RefreshCw, AlertTriangle, 
   Trash2, Plus, Minus, ArrowRight, Settings, Check, X, ShieldAlert,
   Flame, Sparkles, TrendingUp, CreditCard, Edit2, Search,
-  Lock, Unlock, BookOpen, FileText, Users, Printer, Download
+  Lock, Unlock, BookOpen, FileText, Users, Printer, Download, Upload
 } from 'lucide-react';
 import { playNewOrderSound, playOrderReadySound } from '../utils/audio';
 import socket from '../services/socket';
@@ -60,9 +60,13 @@ export default function OperatorConsole() {
   const [creditAccounts, setCreditAccounts] = useState([]);
   const [creditStats, setCreditStats] = useState({ total_due: 0, active_debtors: 0, settled_week: 0 });
   const [creditSearch, setCreditSearch] = useState('');
+  const [creditViewMode, setCreditViewMode] = useState('table'); // 'table' or 'cards'
   const [selectedLedger, setSelectedLedger] = useState(null);
   const [ledgerDetail, setLedgerDetail] = useState(null);
   const [loadingLedger, setLoadingLedger] = useState(false);
+  const [backupLoading, setBackupLoading] = useState(false);
+  const [restoreModal, setRestoreModal] = useState(null);
+  const [restoring, setRestoring] = useState(false);
 
   // Settlement Modal State
   const [showSettleModal, setShowSettleModal] = useState(null);
@@ -73,7 +77,7 @@ export default function OperatorConsole() {
 
   // Add Customer Modal State
   const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
-  const [newCustomer, setNewCustomer] = useState({ customer_name: '', phone: '', desk: '', notes: '' });
+  const [newCustomer, setNewCustomer] = useState({ customer_name: '', department: '', phone: '', desk: '', notes: '' });
   const [addingCustomer, setAddingCustomer] = useState(false);
 
   // QR Standee Modal State
@@ -329,7 +333,7 @@ export default function OperatorConsole() {
       if (res.ok) {
         await loadCreditData();
         setShowAddCustomerModal(false);
-        setNewCustomer({ customer_name: '', phone: '', desk: '', notes: '' });
+        setNewCustomer({ customer_name: '', department: '', phone: '', desk: '', notes: '' });
       } else {
         const err = await res.json();
         alert(err.error || 'Failed to add customer');
@@ -338,6 +342,118 @@ export default function OperatorConsole() {
       alert('Error adding customer');
     } finally {
       setAddingCustomer(false);
+    }
+  };
+
+  // Download Credit Ledger Backup as JSON
+  const handleDownloadBackup = async () => {
+    try {
+      setBackupLoading(true);
+      const res = await operatorFetch('/api/credit/backup');
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to generate backup');
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const dateStr = new Date().toISOString().slice(0, 10);
+      a.href = url;
+      a.download = `credit_ledger_backup_${dateStr}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      alert('Backup failed: ' + e.message);
+    } finally {
+      setBackupLoading(false);
+    }
+  };
+
+  // Export Credit Ledger as CSV for Excel
+  const handleExportCsv = () => {
+    try {
+      if (!creditAccounts || creditAccounts.length === 0) {
+        alert('No credit accounts to export.');
+        return;
+      }
+      const headers = ['Customer Name', 'Department', 'Phone Number', 'Due Amount (Rs)', 'Unpaid Orders', 'Notes', 'Last Order Date'];
+      const rows = creditAccounts.map(acc => [
+        `"${(acc.customer_name || '').replace(/"/g, '""')}"`,
+        `"${(acc.department || acc.desk || 'General').replace(/"/g, '""')}"`,
+        `"${(acc.phone || '').replace(/"/g, '""')}"`,
+        (acc.balance || 0).toFixed(2),
+        acc.unpaid_orders_count || 0,
+        `"${(acc.notes || '').replace(/"/g, '""')}"`,
+        `"${acc.last_order_date || ''}"`
+      ]);
+      const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const dateStr = new Date().toISOString().slice(0, 10);
+      a.href = url;
+      a.download = `credit_ledger_${dateStr}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      alert('CSV Export failed: ' + e.message);
+    }
+  };
+
+  // Handle file chosen for JSON restore
+  const handleFileSelectedForRestore = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const parsed = JSON.parse(evt.target.result);
+        const accounts = Array.isArray(parsed) ? parsed : (parsed.credit_accounts || []);
+        if (!accounts || accounts.length === 0) {
+          alert('Invalid backup file: No credit accounts found in the file.');
+          return;
+        }
+        const totalBalance = accounts.reduce((sum, a) => sum + (parseFloat(a.balance) || 0), 0);
+        setRestoreModal({
+          fileName: file.name,
+          accountsCount: accounts.length,
+          totalDue: totalBalance,
+          data: parsed
+        });
+      } catch (err) {
+        alert('Invalid JSON file format. Please upload a valid .json backup file.');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  // Confirm and execute Restore
+  const handleConfirmRestore = async () => {
+    if (!restoreModal) return;
+    setRestoring(true);
+    try {
+      const res = await operatorFetch('/api/credit/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(restoreModal.data)
+      });
+      const result = await res.json();
+      if (res.ok) {
+        await loadCreditData();
+        setRestoreModal(null);
+        alert(`Restore Complete!\n${result.message || 'Credit accounts updated successfully.'}`);
+      } else {
+        alert('Restore Failed: ' + (result.error || 'Server rejected the backup data.'));
+      }
+    } catch (err) {
+      alert('Error restoring backup: ' + err.message);
+    } finally {
+      setRestoring(false);
     }
   };
 
@@ -1654,114 +1770,287 @@ export default function OperatorConsole() {
 
             {/* Account List & Filter Bar */}
             <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                 <div>
                   <h2 className="text-lg font-black text-slate-900 flex items-center space-x-2">
                     <BookOpen className="w-5 h-5 text-indigo-600" />
                     <span>Weekly Credit Accounts (Credit Ledger)</span>
                   </h2>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Track weekly canteen tabs by employee, view order items, and record payments.
+                    Track staff credit accounts by name, department, phone number, and due amounts.
                   </p>
                 </div>
-                <button
-                  onClick={() => setShowAddCustomerModal(true)}
-                  className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold text-xs shadow-md shadow-indigo-600/20 flex items-center space-x-1.5 transition-all self-start sm:self-auto"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Register Staff Member</span>
-                </button>
-              </div>
 
-              {/* Search Bar */}
-              <div className="relative">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Search staff by name, desk, or phone..."
-                  value={creditSearch}
-                  onChange={(e) => setCreditSearch(e.target.value)}
-                  className="w-full pl-9 pr-8 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                />
-                {creditSearch && (
-                  <button 
-                    onClick={() => setCreditSearch('')}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                {/* Action Buttons: Download Backup, Upload Backup, Export CSV, Register */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    type="file"
+                    id="creditBackupFileInput"
+                    accept=".json"
+                    onChange={handleFileSelectedForRestore}
+                    className="hidden"
+                  />
+
+                  <button
+                    onClick={handleDownloadBackup}
+                    disabled={backupLoading}
+                    className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 font-bold text-xs flex items-center gap-1.5 transition-all border border-slate-200"
+                    title="Download complete JSON backup of credit ledger"
                   >
-                    <X className="w-4 h-4" />
+                    <Download className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>{backupLoading ? 'Exporting...' : 'Download Backup'}</span>
                   </button>
-                )}
+
+                  <button
+                    onClick={() => document.getElementById('creditBackupFileInput').click()}
+                    className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 font-bold text-xs flex items-center gap-1.5 transition-all border border-slate-200"
+                    title="Upload and restore a JSON backup of credit ledger"
+                  >
+                    <Upload className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Upload Backup</span>
+                  </button>
+
+                  <button
+                    onClick={handleExportCsv}
+                    className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 font-bold text-xs flex items-center gap-1.5 transition-all border border-slate-200"
+                    title="Export customer credit balances to CSV for Excel"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Export CSV</span>
+                  </button>
+
+                  <button
+                    onClick={() => setShowAddCustomerModal(true)}
+                    className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold text-xs shadow-md shadow-indigo-600/20 flex items-center space-x-1.5 transition-all"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Register Staff Member</span>
+                  </button>
+                </div>
               </div>
 
-              {/* Customer Cards Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pt-2">
-                {creditAccounts
-                  .filter(acc => {
-                    const q = creditSearch.toLowerCase().trim();
-                    return !q || (acc.customer_name || '').toLowerCase().includes(q) || (acc.desk || '').toLowerCase().includes(q) || (acc.phone || '').toLowerCase().includes(q);
-                  })
-                  .map(acc => {
-                    const hasDues = acc.balance > 0;
-                    return (
-                      <div
-                        key={acc.id}
-                        className={`p-4 rounded-2xl border transition-all flex flex-col justify-between space-y-3 ${
-                          hasDues 
-                            ? 'bg-white border-slate-200 hover:border-indigo-300 shadow-sm' 
-                            : 'bg-slate-50/60 border-slate-200 opacity-80'
-                        }`}
-                      >
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <h3 className="font-extrabold text-slate-900 text-base">{acc.customer_name}</h3>
-                            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 mt-1">
-                              {acc.desk && <span className="bg-slate-100 px-2 py-0.5 rounded-md font-medium">📍 {acc.desk}</span>}
-                              {acc.phone && <span className="text-slate-400">📞 {acc.phone}</span>}
+              {/* Search & View Mode Bar */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search staff by name, department, or phone number..."
+                    value={creditSearch}
+                    onChange={(e) => setCreditSearch(e.target.value)}
+                    className="w-full pl-9 pr-8 py-2 rounded-xl border border-slate-200 text-xs sm:text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-slate-50/50"
+                  />
+                  {creditSearch && (
+                    <button 
+                      onClick={() => setCreditSearch('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1 self-end sm:self-auto bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-bold">
+                  <button
+                    onClick={() => setCreditViewMode('table')}
+                    className={`px-3 py-1 rounded-lg transition-all ${
+                      creditViewMode === 'table'
+                        ? 'bg-white text-indigo-700 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Table View
+                  </button>
+                  <button
+                    onClick={() => setCreditViewMode('cards')}
+                    className={`px-3 py-1 rounded-lg transition-all ${
+                      creditViewMode === 'cards'
+                        ? 'bg-white text-indigo-700 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Cards View
+                  </button>
+                </div>
+              </div>
+
+              {/* Customer Table View (Primary Requirement 1) */}
+              {creditViewMode === 'table' && (
+                <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[11px]">
+                      <tr>
+                        <th className="py-3 px-4">1. Customer / Staff Name</th>
+                        <th className="py-3 px-4">2. Department</th>
+                        <th className="py-3 px-4">3. Phone Number</th>
+                        <th className="py-3 px-4 text-right">4. Due Amount</th>
+                        <th className="py-3 px-4 text-center">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-medium">
+                      {creditAccounts
+                        .filter(acc => {
+                          const q = creditSearch.toLowerCase().trim();
+                          return !q || 
+                            (acc.customer_name || '').toLowerCase().includes(q) || 
+                            (acc.department || '').toLowerCase().includes(q) || 
+                            (acc.desk || '').toLowerCase().includes(q) || 
+                            (acc.phone || '').toLowerCase().includes(q);
+                        })
+                        .map(acc => {
+                          const hasDues = (acc.balance || 0) > 0;
+                          return (
+                            <tr key={acc.id} className="hover:bg-slate-50/80 transition-colors">
+                              <td className="py-3 px-4">
+                                <button
+                                  onClick={() => viewCustomerLedger(acc.customer_name)}
+                                  className="text-left font-bold text-sm text-indigo-700 hover:text-indigo-900 hover:underline flex items-center gap-1.5"
+                                  title="Click to view detailed itemized bill & statement"
+                                >
+                                  <span>{acc.customer_name}</span>
+                                  <FileText className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                </button>
+                                {acc.notes && (
+                                  <p className="text-[10px] text-slate-400 italic truncate max-w-xs">{acc.notes}</p>
+                                )}
+                              </td>
+                              <td className="py-3 px-4">
+                                <span className="inline-block px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 font-semibold border border-indigo-100/80">
+                                  {acc.department || acc.desk || 'General Staff'}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4">
+                                {acc.phone ? (
+                                  <a href={`tel:${acc.phone}`} className="text-slate-700 hover:text-indigo-600 font-mono">
+                                    📞 {acc.phone}
+                                  </a>
+                                ) : (
+                                  <span className="text-slate-400 italic">—</span>
+                                )}
+                              </td>
+                              <td className="py-3 px-4 text-right">
+                                <span className={`text-base font-black ${hasDues ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                  ₹{acc.balance}
+                                </span>
+                                <span className={`block text-[10px] font-bold uppercase tracking-wider ${hasDues ? 'text-rose-500' : 'text-emerald-600'}`}>
+                                  {hasDues ? `${acc.unpaid_orders_count || 0} unpaid` : 'Cleared'}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4">
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <button
+                                    onClick={() => viewCustomerLedger(acc.customer_name)}
+                                    className="py-1.5 px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all flex items-center gap-1"
+                                    title="View detailed orders, items, and statement"
+                                  >
+                                    <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                                    <span>Statement</span>
+                                  </button>
+                                  <button
+                                    disabled={!hasDues}
+                                    onClick={() => {
+                                      setShowSettleModal(acc);
+                                      setSettleAmount(String(acc.balance));
+                                    }}
+                                    className="py-1.5 px-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 disabled:opacity-30 disabled:pointer-events-none text-white text-xs font-bold shadow-xs transition-all flex items-center gap-1"
+                                    title="Record payment to settle balance"
+                                  >
+                                    <CheckCircle className="w-3.5 h-3.5" />
+                                    <span>Settle</span>
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Customer Cards Grid View */}
+              {creditViewMode === 'cards' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pt-2">
+                  {creditAccounts
+                    .filter(acc => {
+                      const q = creditSearch.toLowerCase().trim();
+                      return !q || 
+                        (acc.customer_name || '').toLowerCase().includes(q) || 
+                        (acc.department || '').toLowerCase().includes(q) || 
+                        (acc.desk || '').toLowerCase().includes(q) || 
+                        (acc.phone || '').toLowerCase().includes(q);
+                    })
+                    .map(acc => {
+                      const hasDues = (acc.balance || 0) > 0;
+                      return (
+                        <div
+                          key={acc.id}
+                          className={`p-4 rounded-2xl border transition-all flex flex-col justify-between space-y-3 ${
+                            hasDues 
+                              ? 'bg-white border-slate-200 hover:border-indigo-300 shadow-sm' 
+                              : 'bg-slate-50/60 border-slate-200 opacity-80'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <button
+                                onClick={() => viewCustomerLedger(acc.customer_name)}
+                                className="font-extrabold text-slate-900 text-base text-left hover:text-indigo-600 hover:underline flex items-center gap-1"
+                              >
+                                <span>{acc.customer_name}</span>
+                                <FileText className="w-3.5 h-3.5 text-slate-400 inline" />
+                              </button>
+                              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 mt-1">
+                                <span className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-semibold border border-indigo-100">
+                                  🏢 {acc.department || acc.desk || 'General'}
+                                </span>
+                                {acc.phone && <span className="text-slate-400">📞 {acc.phone}</span>}
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <span className={`text-xl font-black block ${hasDues ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                ₹{acc.balance}
+                              </span>
+                              <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                                hasDues ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'
+                              }`}>
+                                {hasDues ? `${acc.unpaid_orders_count || 0} Unpaid Orders` : 'All Cleared'}
+                              </span>
                             </div>
                           </div>
-                          <div className="text-right">
-                            <span className={`text-xl font-black block ${hasDues ? 'text-rose-600' : 'text-emerald-600'}`}>
-                              ₹{acc.balance}
-                            </span>
-                            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                              hasDues ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'
-                            }`}>
-                              {hasDues ? `${acc.unpaid_orders_count || 0} Unpaid Orders` : 'All Cleared'}
-                            </span>
+
+                          {acc.notes && (
+                            <p className="text-xs text-slate-500 bg-slate-50 p-2 rounded-xl border border-slate-100 italic">
+                              "{acc.notes}"
+                            </p>
+                          )}
+
+                          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+                            <button
+                              onClick={() => viewCustomerLedger(acc.customer_name)}
+                              className="py-2 px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+                            >
+                              <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                              <span>View Bill</span>
+                            </button>
+
+                            <button
+                              disabled={!hasDues}
+                              onClick={() => {
+                                setShowSettleModal(acc);
+                                setSettleAmount(String(acc.balance));
+                              }}
+                              className="py-2 px-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 disabled:opacity-40 disabled:pointer-events-none text-white text-xs font-bold shadow-sm transition-all flex items-center justify-center gap-1.5"
+                            >
+                              <CheckCircle className="w-3.5 h-3.5" />
+                              <span>Settle Bill</span>
+                            </button>
                           </div>
                         </div>
-
-                        {acc.notes && (
-                          <p className="text-xs text-slate-500 bg-slate-50 p-2 rounded-xl border border-slate-100 italic">
-                            "{acc.notes}"
-                          </p>
-                        )}
-
-                        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
-                          <button
-                            onClick={() => viewCustomerLedger(acc.customer_name)}
-                            className="py-2 px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all flex items-center justify-center gap-1.5"
-                          >
-                            <FileText className="w-3.5 h-3.5 text-indigo-600" />
-                            <span>View Bill</span>
-                          </button>
-
-                          <button
-                            disabled={!hasDues}
-                            onClick={() => {
-                              setShowSettleModal(acc);
-                              setSettleAmount(String(acc.balance));
-                            }}
-                            className="py-2 px-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 disabled:opacity-40 disabled:pointer-events-none text-white text-xs font-bold shadow-sm transition-all flex items-center justify-center gap-1.5"
-                          >
-                            <CheckCircle className="w-3.5 h-3.5" />
-                            <span>Settle Bill</span>
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-              </div>
+                      );
+                    })}
+                </div>
+              )}
 
               {creditAccounts.length === 0 && (
                 <div className="text-center py-12 text-slate-400 space-y-2">
@@ -2320,9 +2609,15 @@ export default function OperatorConsole() {
                         <p className={`text-2xl font-black ${ledgerDetail.account.balance > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
                           ₹{ledgerDetail.account.balance}
                         </p>
-                        <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
-                          {ledgerDetail.account.desk && <span>📍 {ledgerDetail.account.desk}</span>}
-                          {ledgerDetail.account.phone && <span>📞 {ledgerDetail.account.phone}</span>}
+                        <div className="flex flex-wrap items-center gap-3 mt-1.5 text-xs text-slate-600">
+                          <span className="bg-indigo-50 text-indigo-700 px-2.5 py-0.5 rounded-md font-semibold border border-indigo-100">
+                            🏢 Department: {ledgerDetail.account.department || ledgerDetail.account.desk || 'General'}
+                          </span>
+                          {ledgerDetail.account.phone ? (
+                            <span className="font-mono">📞 {ledgerDetail.account.phone}</span>
+                          ) : (
+                            <span className="text-slate-400 italic">📞 No phone</span>
+                          )}
                         </div>
                       </div>
 
@@ -2340,40 +2635,105 @@ export default function OperatorConsole() {
                       )}
                     </div>
 
-                    {/* Credit Orders Section */}
+                    {/* Credit Orders Section: Itemized with Date, Description, Quantity, Price */}
                     <div>
-                      <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                        <FileText className="w-4 h-4 text-orange-500" />
-                        Credit Orders ({ledgerDetail.orders.length})
-                      </h4>
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                          <FileText className="w-4 h-4 text-orange-500" />
+                          <span>Credit Orders & Itemized Statement ({ledgerDetail.orders.length})</span>
+                        </h4>
+                        <span className="text-[11px] text-slate-500 font-medium">
+                          Date • Items • Quantity • Price
+                        </span>
+                      </div>
 
                       {ledgerDetail.orders.length === 0 ? (
-                        <p className="text-xs text-slate-400 italic py-2">No credit orders recorded yet.</p>
+                        <div className="text-center py-8 bg-slate-50 rounded-2xl border border-slate-100 text-slate-400 text-xs">
+                          No credit orders recorded yet.
+                        </div>
                       ) : (
-                        <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                          {ledgerDetail.orders.map((o) => (
-                            <div key={o.id} className="p-3 bg-white rounded-xl border border-slate-200 flex items-center justify-between text-xs hover:border-slate-300 transition-colors">
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <span className="font-mono font-bold text-slate-800">Token #{o.token_no}</span>
-                                  <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] ${
-                                    o.payment_status === 'PAID' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'
-                                  }`}>
-                                    {o.payment_status}
-                                  </span>
+                        <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+                          {ledgerDetail.orders.map((o) => {
+                            const orderDate = new Date(o.created_at).toLocaleString('en-IN', {
+                              day: '2-digit',
+                              month: 'short',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              hour12: true
+                            });
+
+                            return (
+                              <div key={o.id} className="p-3.5 bg-white rounded-2xl border border-slate-200 shadow-xs space-y-2.5">
+                                {/* Order Header: Date, Token, Status, Bill */}
+                                <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-100">
+                                  <div className="flex items-center gap-2">
+                                    <span className="px-2 py-0.5 rounded-lg bg-orange-100 text-orange-800 font-mono font-bold text-xs">
+                                      Token #{o.token_no}
+                                    </span>
+                                    <span className="text-xs font-semibold text-slate-700">
+                                      📅 {orderDate}
+                                    </span>
+                                    <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] ${
+                                      o.payment_status === 'PAID' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'
+                                    }`}>
+                                      {o.payment_status === 'PAID' ? '✓ PAID' : '⏳ UNPAID'}
+                                    </span>
+                                  </div>
+                                  <div className="text-right font-black text-sm text-slate-900">
+                                    Total: ₹{o.total_amount}
+                                  </div>
                                 </div>
-                                <p className="text-[11px] text-slate-500 mt-1">
-                                  {o.items?.map(it => `${it.quantity}x ${it.name}`).join(', ')}
-                                </p>
-                                <p className="text-[10px] text-slate-400 mt-0.5">
-                                  {new Date(o.created_at).toLocaleString()}
-                                </p>
+
+                                {/* Items Table: Description, Quantity, Price, Total */}
+                                <div className="overflow-x-auto">
+                                  <table className="w-full text-left text-xs">
+                                    <thead className="text-[10px] uppercase font-bold text-slate-400 bg-slate-50 rounded-lg">
+                                      <tr>
+                                        <th className="py-1.5 px-2.5 rounded-l-lg">Item & Description</th>
+                                        <th className="py-1.5 px-2 text-center">Qty</th>
+                                        <th className="py-1.5 px-2 text-right">Price</th>
+                                        <th className="py-1.5 px-2.5 text-right rounded-r-lg">Subtotal</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                      {o.items && o.items.length > 0 ? (
+                                        o.items.map((it, idx) => (
+                                          <tr key={it.id || idx} className="hover:bg-slate-50/50">
+                                            <td className="py-2 px-2.5">
+                                              <span className="font-bold text-slate-800 block">
+                                                {it.item_name || it.name}
+                                              </span>
+                                              {it.description && (
+                                                <span className="text-[11px] text-slate-500 italic block leading-tight">
+                                                  {it.description}
+                                                </span>
+                                              )}
+                                            </td>
+                                            <td className="py-2 px-2 text-center font-mono font-semibold text-slate-700">
+                                              {it.quantity}
+                                            </td>
+                                            <td className="py-2 px-2 text-right font-mono text-slate-600">
+                                              ₹{it.price}
+                                            </td>
+                                            <td className="py-2 px-2.5 text-right font-mono font-bold text-slate-900">
+                                              ₹{it.total_price || (it.price * it.quantity)}
+                                            </td>
+                                          </tr>
+                                        ))
+                                      ) : (
+                                        <tr>
+                                          <td colSpan={4} className="py-2 text-slate-400 italic text-center">
+                                            No item details available
+                                          </td>
+                                        </tr>
+                                      )}
+                                    </tbody>
+                                  </table>
+                                </div>
                               </div>
-                              <span className="font-bold text-slate-800 text-sm">
-                                ₹{o.total_amount}
-                              </span>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                     </div>
@@ -2420,6 +2780,63 @@ export default function OperatorConsole() {
                 >
                   Close Statement
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Restore Credit Ledger Confirmation Modal */}
+        {restoreModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+            <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden border border-slate-100">
+              <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-4 text-white flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <Upload className="w-5 h-5" />
+                  <h3 className="font-bold text-base">Restore Credit Ledger</h3>
+                </div>
+                <button 
+                  onClick={() => setRestoreModal(null)}
+                  className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4 text-sm">
+                <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 space-y-2">
+                  <p className="font-bold text-sm flex items-center gap-1.5">
+                    <CheckCircle className="w-4 h-4 text-emerald-600" />
+                    <span>Valid Backup File Detected</span>
+                  </p>
+                  <div className="text-xs space-y-1 text-emerald-800">
+                    <p><span className="font-bold">File:</span> {restoreModal.fileName}</p>
+                    <p><span className="font-bold">Staff Accounts:</span> {restoreModal.accountsCount} records</p>
+                    <p><span className="font-bold">Total Dues in Backup:</span> ₹{restoreModal.totalDue.toFixed(2)}</p>
+                  </div>
+                </div>
+
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Restoring will update customer accounts, departments, phone numbers, and balances from this backup file.
+                </p>
+
+                <div className="pt-3 border-t border-slate-100 flex items-center justify-end space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => setRestoreModal(null)}
+                    disabled={restoring}
+                    className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-100 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmRestore}
+                    disabled={restoring}
+                    className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all flex items-center gap-1.5"
+                  >
+                    {restoring ? 'Restoring...' : 'Confirm & Restore'}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -2591,13 +3008,13 @@ export default function OperatorConsole() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                      Desk / Department
+                      Department
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g. Accounts 2F"
-                      value={newCustomer.desk}
-                      onChange={(e) => setNewCustomer({ ...newCustomer, desk: e.target.value })}
+                      placeholder="e.g. Accounts, ECE, Library"
+                      value={newCustomer.department || newCustomer.desk}
+                      onChange={(e) => setNewCustomer({ ...newCustomer, department: e.target.value, desk: e.target.value })}
                       className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none"
                     />
                   </div>

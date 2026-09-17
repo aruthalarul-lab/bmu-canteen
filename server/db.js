@@ -65,6 +65,7 @@ function initDb() {
     CREATE TABLE IF NOT EXISTS credit_accounts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       customer_name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+      department TEXT DEFAULT '',
       phone TEXT DEFAULT '',
       desk TEXT DEFAULT '',
       notes TEXT DEFAULT '',
@@ -94,6 +95,19 @@ function initDb() {
   } catch (e) {
     // Column already exists
   }
+  try {
+    db.exec("ALTER TABLE orders ADD COLUMN customer_department TEXT DEFAULT ''");
+  } catch (e) {
+    // Column already exists
+  }
+  try {
+    db.exec("ALTER TABLE credit_accounts ADD COLUMN department TEXT DEFAULT ''");
+  } catch (e) {
+    // Column already exists
+  }
+  try {
+    db.exec("UPDATE credit_accounts SET department = desk WHERE (department IS NULL OR department = '') AND desk != ''");
+  } catch (e) {}
 
   // Initialize default settings if missing
   const insertSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');

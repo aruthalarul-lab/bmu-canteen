@@ -434,21 +434,23 @@ app.post('/api/orders', async (req, res) => {
 
       // If placed on Credit, automatically update customer credit account
       if (finalPaymentMethod === 'CREDIT') {
+        const cleanDept = (cleanCustomerDesk || '').trim();
         const existingAcc = db.prepare('SELECT * FROM credit_accounts WHERE LOWER(customer_name) = LOWER(?)').get(cleanCustomerName);
         if (existingAcc) {
           db.prepare(`
             UPDATE credit_accounts 
             SET balance = balance + ?, 
                 phone = CASE WHEN ? != '' THEN ? ELSE phone END,
+                department = CASE WHEN ? != '' THEN ? ELSE department END,
                 desk = CASE WHEN ? != '' THEN ? ELSE desk END,
                 updated_at = CURRENT_TIMESTAMP 
             WHERE id = ?
-          `).run(calculatedTotal, cleanCustomerPhone, cleanCustomerPhone, cleanCustomerDesk, cleanCustomerDesk, existingAcc.id);
+          `).run(calculatedTotal, cleanCustomerPhone, cleanCustomerPhone, cleanDept, cleanDept, cleanCustomerDesk, cleanCustomerDesk, existingAcc.id);
         } else {
           db.prepare(`
-            INSERT INTO credit_accounts (customer_name, phone, desk, balance) 
-            VALUES (?, ?, ?, ?)
-          `).run(cleanCustomerName, cleanCustomerPhone, cleanCustomerDesk, calculatedTotal);
+            INSERT INTO credit_accounts (customer_name, department, phone, desk, balance) 
+            VALUES (?, ?, ?, ?, ?)
+          `).run(cleanCustomerName, cleanDept, cleanCustomerPhone, cleanCustomerDesk, calculatedTotal);
         }
       }
 
@@ -557,33 +559,38 @@ app.get('/api/credit/accounts', (req, res) => {
 
 // POST /api/credit/accounts - Add or update a customer credit profile (Requires Operator Auth)
 app.post('/api/credit/accounts', requireOperatorAuth, (req, res) => {
-  const { customer_name, phone, desk, notes } = req.body;
+  const { customer_name, department, phone, desk, notes } = req.body;
   if (!customer_name || !customer_name.trim()) {
     return res.status(400).json({ error: 'Customer name is required' });
   }
   const cleanName = customer_name.trim();
+  const cleanDept = (department || desk || '').trim();
+  const cleanPhone = (phone || '').trim();
+  const cleanDesk = (desk || cleanDept || '').trim();
+  const cleanNotes = (notes || '').trim();
+
   const existing = db.prepare('SELECT * FROM credit_accounts WHERE LOWER(customer_name) = LOWER(?)').get(cleanName);
   if (existing) {
     db.prepare(`
       UPDATE credit_accounts 
-      SET phone = ?, desk = ?, notes = ?, updated_at = CURRENT_TIMESTAMP 
+      SET department = ?, phone = ?, desk = ?, notes = ?, updated_at = CURRENT_TIMESTAMP 
       WHERE id = ?
-    `).run(phone || '', desk || '', notes || '', existing.id);
+    `).run(cleanDept, cleanPhone, cleanDesk, cleanNotes, existing.id);
     const updated = db.prepare('SELECT * FROM credit_accounts WHERE id = ?').get(existing.id);
     io.emit('credit-updated', { customer_name: cleanName });
     return res.json(updated);
   }
 
   const result = db.prepare(`
-    INSERT INTO credit_accounts (customer_name, phone, desk, notes, balance) 
-    VALUES (?, ?, ?, ?, 0)
-  `).run(cleanName, phone || '', desk || '', notes || '');
+    INSERT INTO credit_accounts (customer_name, department, phone, desk, notes, balance) 
+    VALUES (?, ?, ?, ?, ?, 0)
+  `).run(cleanName, cleanDept, cleanPhone, cleanDesk, cleanNotes);
   const created = db.prepare('SELECT * FROM credit_accounts WHERE id = ?').get(result.lastInsertRowid);
   io.emit('credit-updated', { customer_name: cleanName });
   res.status(201).json(created);
 });
 
-// GET /api/credit/accounts/:name - Get individual ledger & order breakdown
+// GET /api/credit/accounts/:name - Get individual ledger & order breakdown with item descriptions
 app.get('/api/credit/accounts/:name', (req, res) => {
   const name = decodeURIComponent(req.params.name).trim();
   const account = db.prepare('SELECT * FROM credit_accounts WHERE LOWER(customer_name) = LOWER(?)').get(name);
@@ -598,7 +605,12 @@ app.get('/api/credit/accounts/:name', (req, res) => {
     ORDER BY id DESC
   `).all(name);
 
-  const getItems = db.prepare('SELECT * FROM order_items WHERE order_id = ?');
+  const getItems = db.prepare(`
+    SELECT oi.*, COALESCE(mi.description, '') as description
+    FROM order_items oi
+    LEFT JOIN menu_items mi ON oi.menu_item_id = mi.id
+    WHERE oi.order_id = ?
+  `);
   const enrichedOrders = orders.map(o => ({
     ...o,
     items: getItems.all(o.id)
@@ -661,6 +673,123 @@ app.post('/api/credit/settle', requireOperatorAuth, (req, res) => {
   const newBalance = settleTx();
   io.emit('credit-updated', { customer_name: account.customer_name, balance: newBalance });
   res.json({ success: true, customer_name: account.customer_name, new_balance: newBalance });
+});
+
+// GET /api/credit/backup - Export full credit ledger backup (Requires Operator Auth)
+app.get('/api/credit/backup', requireOperatorAuth, (req, res) => {
+  try {
+    const accounts = db.prepare('SELECT * FROM credit_accounts ORDER BY id ASC').all();
+    const settlements = db.prepare('SELECT * FROM credit_settlements ORDER BY id ASC').all();
+    const orders = db.prepare(`
+      SELECT o.*, 
+        (SELECT json_group_array(json_object(
+          'id', oi.id,
+          'menu_item_id', oi.menu_item_id,
+          'item_name', oi.item_name,
+          'price', oi.price,
+          'quantity', oi.quantity,
+          'total_price', oi.total_price,
+          'description', COALESCE(mi.description, '')
+        )) 
+        FROM order_items oi 
+        LEFT JOIN menu_items mi ON oi.menu_item_id = mi.id 
+        WHERE oi.order_id = o.id
+      ) as items_json
+      FROM orders o 
+      WHERE o.payment_method = 'CREDIT'
+      ORDER BY o.id ASC
+    `).all();
+
+    const parsedOrders = orders.map(o => ({
+      ...o,
+      items: o.items_json ? JSON.parse(o.items_json) : []
+    }));
+
+    const totalDue = accounts.reduce((sum, a) => sum + (a.balance || 0), 0);
+
+    const backup = {
+      system: 'BMU Canteen Credit Ledger',
+      version: 1,
+      exported_at: new Date().toISOString(),
+      accounts_count: accounts.length,
+      total_due: totalDue,
+      credit_accounts: accounts,
+      credit_settlements: settlements,
+      credit_orders: parsedOrders
+    };
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="credit_ledger_backup_${new Date().toISOString().slice(0,10)}.json"`);
+    res.json(backup);
+  } catch (err) {
+    console.error('[Credit Backup Error]', err);
+    res.status(500).json({ error: 'Failed to generate credit backup: ' + err.message });
+  }
+});
+
+// POST /api/credit/restore - Restore/import credit ledger backup (Requires Operator Auth)
+app.post('/api/credit/restore', requireOperatorAuth, (req, res) => {
+  try {
+    const data = req.body;
+    const accounts = Array.isArray(data) ? data : (data.credit_accounts || []);
+    if (!Array.isArray(accounts) || accounts.length === 0) {
+      return res.status(400).json({ error: 'Invalid backup file: no credit accounts found' });
+    }
+
+    const restoreTx = db.transaction(() => {
+      let upsertedCount = 0;
+      const checkStmt = db.prepare('SELECT id FROM credit_accounts WHERE LOWER(customer_name) = LOWER(?)');
+      const updateStmt = db.prepare(`
+        UPDATE credit_accounts 
+        SET department = ?, phone = ?, desk = ?, notes = ?, balance = ?, updated_at = CURRENT_TIMESTAMP 
+        WHERE id = ?
+      `);
+      const insertStmt = db.prepare(`
+        INSERT INTO credit_accounts (customer_name, department, phone, desk, notes, balance) 
+        VALUES (?, ?, ?, ?, ?, ?)
+      `);
+
+      for (const acc of accounts) {
+        if (!acc.customer_name || !acc.customer_name.trim()) continue;
+        const name = acc.customer_name.trim();
+        const dept = (acc.department || acc.desk || '').trim();
+        const phone = (acc.phone || '').trim();
+        const desk = (acc.desk || dept || '').trim();
+        const notes = (acc.notes || '').trim();
+        const balance = isNaN(parseFloat(acc.balance)) ? 0 : parseFloat(acc.balance);
+
+        const existing = checkStmt.get(name);
+        if (existing) {
+          updateStmt.run(dept, phone, desk, notes, balance, existing.id);
+        } else {
+          insertStmt.run(name, dept, phone, desk, notes, balance);
+        }
+        upsertedCount++;
+      }
+
+      // Restore settlements if present
+      if (Array.isArray(data.credit_settlements) && data.credit_settlements.length > 0) {
+        const insertSettlement = db.prepare(`
+          INSERT INTO credit_settlements (customer_name, amount_paid, payment_method, notes, settled_at)
+          VALUES (?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))
+        `);
+        for (const s of data.credit_settlements) {
+          if (s.customer_name && s.amount_paid) {
+            insertSettlement.run(s.customer_name, s.amount_paid, s.payment_method || 'CASH', s.notes || '', s.settled_at || null);
+          }
+        }
+      }
+
+      return upsertedCount;
+    });
+
+    const count = restoreTx();
+    io.emit('credit-updated', { type: 'restored', count });
+    res.json({ success: true, count, message: `Successfully restored ${count} credit accounts.` });
+  } catch (err) {
+    console.error('[Credit Restore Error]', err);
+    res.status(500).json({ error: 'Failed to restore credit backup: ' + err.message });
+  }
 });
 
 // GET /api/credit/stats - Summary metrics for Credit
