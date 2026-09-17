@@ -175,13 +175,7 @@ export default function CustomerMenu({
       return;
     }
 
-    // 3. Online orders do not accept Cash
-    if (paymentMethod === 'CASH') {
-      alert('💵 Cash payments must be placed and paid directly at Counter 1 Cashier.');
-      return;
-    }
-
-    // 4. For Staff Credit, mobile number is mandatory
+    // 3. For Staff Credit, mobile number is mandatory
     if (paymentMethod === 'CREDIT') {
       const cleanPhone = customerPhone.trim().replace(/\D/g, '');
       if (cleanPhone.length < 10) {
@@ -205,7 +199,7 @@ export default function CustomerMenu({
         customer_phone: customerPhone.trim(),
         payment_method: paymentMethod,
         order_type: 'ONLINE',
-        payment_status: paymentMethod === 'CREDIT' ? 'PENDING' : 'PAID',
+        payment_status: (paymentMethod === 'CREDIT' || paymentMethod === 'CASH') ? 'PENDING' : 'PAID',
         items: cart.map(item => ({
           menu_item_id: item.id,
           quantity: item.quantity,
@@ -288,19 +282,31 @@ export default function CustomerMenu({
               </div>
               <div>
                 <div className="flex items-center space-x-2">
-                  <span className="font-bold text-base">Your Order is in Progress</span>
+                  <span className="font-bold text-base">
+                    {activeOrder.payment_method === 'CASH' && activeOrder.payment_status === 'PENDING'
+                      ? '💵 Pay Cash at Counter 1'
+                      : 'Your Order is in Progress'}
+                  </span>
                   <span className={`px-2 py-0.5 rounded-full text-xs font-extrabold uppercase tracking-wide ${
-                    activeOrder.status === 'READY' 
+                    activeOrder.payment_method === 'CASH' && activeOrder.payment_status === 'PENDING'
+                      ? 'bg-amber-300 text-slate-900 animate-pulse'
+                      : activeOrder.status === 'READY' 
                       ? 'bg-emerald-400 text-slate-900 animate-ready-glow' 
                       : activeOrder.status === 'PREPARING'
                       ? 'bg-amber-300 text-slate-900'
                       : 'bg-white/20 text-white'
                   }`}>
-                    {activeOrder.status === 'READY' ? '🎉 READY FOR PICKUP!' : activeOrder.status}
+                    {activeOrder.payment_method === 'CASH' && activeOrder.payment_status === 'PENDING'
+                      ? '⏳ AWAITING CASH'
+                      : activeOrder.status === 'READY' 
+                      ? '🎉 READY FOR PICKUP!' 
+                      : activeOrder.status}
                   </span>
                 </div>
                 <p className="text-xs text-orange-100">
-                  {activeOrder.status === 'READY' 
+                  {activeOrder.payment_method === 'CASH' && activeOrder.payment_status === 'PENDING'
+                    ? `Please visit Counter 1 and pay ₹${activeOrder.total_amount} to cashier. Cooking will begin once confirmed!`
+                    : activeOrder.status === 'READY' 
                     ? 'Please collect your food at the counter right now!' 
                     : activeOrder.status === 'PREPARING'
                     ? 'Chef is preparing your meal fresh at the counter.'
@@ -835,14 +841,14 @@ export default function CustomerMenu({
                       {paymentMethod === 'CASH' && (
                         <div className="mt-3 p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-900 space-y-2 animate-fade-in">
                           <div className="font-bold flex items-center gap-1.5 text-amber-800">
-                            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                            <span>Cash Orders at Counter 1 Only</span>
+                            <Clock className="w-4 h-4 text-amber-600 shrink-0" />
+                            <span>Pay Cash at Counter 1 Workflow</span>
                           </div>
-                          <p className="text-slate-600 leading-tight">
-                            To ensure food is prepared only for verified orders, cash payments must be made in person.
+                          <p className="text-slate-700 leading-tight">
+                            You will receive a Token Number right now. Please walk up to <strong>Counter 1</strong> and pay ₹{cartSubtotal} in cash to the cashier.
                           </p>
-                          <div className="bg-white p-2 rounded-xl border border-amber-200 font-semibold text-amber-900">
-                            👉 Please visit <strong>Counter 1 Cashier</strong> to place and pay for your cash order directly.
+                          <div className="bg-white p-2.5 rounded-xl border border-amber-200 font-semibold text-amber-950 text-[11px]">
+                            🔔 <strong>Note:</strong> Kitchen will start preparing your meal fresh immediately after the cashier confirms your cash payment.
                           </div>
                         </div>
                       )}
@@ -901,9 +907,23 @@ export default function CustomerMenu({
                   )}
 
                   {paymentMethod === 'CASH' && (
-                    <div className="w-full py-3 px-4 rounded-2xl bg-slate-200 text-slate-500 font-bold text-xs text-center">
-                      💵 Please Visit Counter 1 to Place Cash Order
-                    </div>
+                    <button
+                      onClick={handlePlaceOrder}
+                      disabled={submittingOrder || !customerName.trim() || !customerDesk.trim()}
+                      className="w-full py-3.5 px-4 rounded-2xl bg-amber-500 hover:bg-amber-600 active:scale-98 disabled:opacity-50 text-white font-extrabold text-sm shadow-lg shadow-amber-500/25 transition-all flex items-center justify-center space-x-2"
+                    >
+                      {submittingOrder ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          <span>Generating Token...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>💵 Place Order (Pay Cash at Counter 1)</span>
+                          <ArrowRight className="w-4 h-4" />
+                        </>
+                      )}
+                    </button>
                   )}
                 </div>
               )}

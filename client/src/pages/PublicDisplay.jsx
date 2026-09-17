@@ -42,7 +42,14 @@ export default function PublicDisplay() {
         if (updated.status === 'COMPLETED' || updated.status === 'CANCELLED') {
           return prev.filter(o => o.id !== updated.id);
         }
-        return prev.map(o => o.id === updated.id ? updated : o);
+        const exists = prev.find(o => o.id === updated.id);
+        if (exists) {
+          return prev.map(o => o.id === updated.id ? updated : o);
+        }
+        if (updated.payment_status === 'PAID' || updated.payment_method === 'CREDIT' || updated.order_type === 'COUNTER') {
+          return [updated, ...prev];
+        }
+        return prev;
       });
     };
 

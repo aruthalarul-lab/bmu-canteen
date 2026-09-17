@@ -570,8 +570,9 @@ export default function OperatorConsole() {
     }
   };
 
-  // Partition active orders for Kanban (strictly excludes cancelled & unpaid orders)
-  const pendingOrders = orders.filter(o => o.status === 'PENDING' && o.status !== 'CANCELLED' && (o.payment_status === 'PAID' || o.payment_method === 'CREDIT' || o.order_type === 'COUNTER'));
+  // Partition active orders for Kanban
+  const unconfirmedCashOrders = orders.filter(o => o.payment_method === 'CASH' && o.payment_status === 'PENDING' && o.status !== 'CANCELLED');
+  const pendingOrders = orders.filter(o => o.status === 'PENDING' && o.status !== 'CANCELLED' && (o.payment_status === 'PAID' || o.payment_method === 'CREDIT'));
   const preparingOrders = orders.filter(o => o.status === 'PREPARING' && o.status !== 'CANCELLED');
   const readyOrders = orders.filter(o => o.status === 'READY' && o.status !== 'CANCELLED');
 
@@ -840,7 +841,91 @@ export default function OperatorConsole() {
 
         {/* ================= VIEW 1: KITCHEN & DELIVERY QUEUE ================= */}
         {tab === 'queue' && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
+          <div className="space-y-4 sm:space-y-6">
+            
+            {/* UNCONFIRMED CASH ORDERS AWAITING COLLECTION AT COUNTER 1 */}
+            {unconfirmedCashOrders.length > 0 && (
+              <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 rounded-3xl p-4 sm:p-5 text-white shadow-xl border border-amber-300 animate-fade-in">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center space-x-2.5">
+                    <span className="w-3.5 h-3.5 rounded-full bg-white animate-ping"></span>
+                    <h2 className="font-black text-sm sm:text-base uppercase tracking-wider text-white flex items-center gap-2">
+                      <span>💵 Cash Payment Required at Counter 1</span>
+                      <span className="bg-white text-orange-700 px-2 py-0.5 rounded-full text-xs font-black">
+                        {unconfirmedCashOrders.length} Waiting to Pay
+                      </span>
+                    </h2>
+                  </div>
+                  <span className="text-xs text-amber-100 font-semibold hidden md:inline">
+                    Collect cash ➔ Tap "Confirm Cash Received" ➔ Moves to kitchen queue
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {unconfirmedCashOrders.map(order => (
+                    <div key={order.id} className="bg-white rounded-2xl p-4 text-slate-900 shadow-md border-2 border-amber-300 flex flex-col justify-between hover:shadow-lg transition-all">
+                      <div>
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center space-x-2">
+                            <span className="text-2xl font-black text-amber-700 font-mono-code bg-amber-100 px-2.5 py-1 rounded-xl border border-amber-300">
+                              #{order.token_no}
+                            </span>
+                            <div>
+                              <span className="text-sm font-bold text-slate-900 block truncate max-w-[130px]">
+                                {order.customer_name}
+                              </span>
+                              <span className="text-xs text-slate-500 block">
+                                🆔 {order.customer_desk}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="text-right">
+                            <span className="text-base font-black text-emerald-700 block">
+                              ₹{order.total_amount}
+                            </span>
+                            <span className="text-[10px] font-extrabold text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded uppercase">
+                              Unpaid Cash
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Order Items */}
+                        <div className="my-2.5 py-1.5 border-y border-slate-100 space-y-1">
+                          {order.items?.map((item, idx) => (
+                            <div key={idx} className="flex justify-between text-xs text-slate-700">
+                              <span className="font-semibold">{item.quantity}x {item.item_name}</span>
+                              <span className="text-slate-400">₹{item.total_price}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Cashier Action Buttons */}
+                      <div className="flex items-center gap-2 mt-2 pt-1">
+                        <button
+                          onClick={() => cancelOrder(order.id, order.token_no)}
+                          className="py-2.5 px-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs border border-rose-200 transition-all flex items-center justify-center gap-1 shrink-0"
+                          title="Cancel Order"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                          <span>Cancel</span>
+                        </button>
+                        <button
+                          onClick={() => markPaymentPaid(order.id)}
+                          className="flex-1 py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-extrabold text-xs shadow-md transition-all flex items-center justify-center space-x-1.5"
+                        >
+                          <Check className="w-4 h-4" />
+                          <span>Confirm Cash Received (₹{order.total_amount})</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
             
             {/* COLUMN 1: PENDING / NEW ORDERS */}
             <div className="bg-amber-50/60 rounded-2xl p-4 border border-amber-200 flex flex-col h-[calc(100vh-14rem)] min-h-[500px]">
@@ -1141,6 +1226,7 @@ export default function OperatorConsole() {
             </div>
 
           </div>
+        </div>
         )}
 
         {/* ================= VIEW 2: FAST-POS (2-TAP COUNTER BILLING) ================= */}

@@ -249,13 +249,13 @@ function getOrderWithItems(orderId) {
   return { ...order, items };
 }
 
-// GET /api/orders/active - Pending, Preparing, Ready (Excludes cancelled and unpaid orders)
+// GET /api/orders/active - Pending, Preparing, Ready (Includes unconfirmed cash orders for counter verification)
 app.get('/api/orders/active', (req, res) => {
   const orders = db.prepare(`
     SELECT * FROM orders 
     WHERE status IN ('PENDING', 'PREPARING', 'READY')
       AND status != 'CANCELLED'
-      AND (payment_status = 'PAID' OR payment_method = 'CREDIT' OR order_type = 'COUNTER')
+      AND (payment_status = 'PAID' OR payment_method = 'CREDIT' OR order_type = 'COUNTER' OR (payment_method = 'CASH' AND payment_status = 'PENDING'))
     ORDER BY CASE status 
       WHEN 'READY' THEN 1 
       WHEN 'PREPARING' THEN 2 
@@ -359,11 +359,6 @@ app.post('/api/orders', async (req, res) => {
       }
     }
 
-    // 5. For online orders, Cash payments must be made at the counter POS
-    if (finalOrderType === 'ONLINE' && finalPaymentMethod === 'CASH') {
-      return res.status(400).json({ error: 'Cash payments must be made directly at Counter 1 POS.' });
-    }
-
     // Calculate total and prepare items
     let calculatedTotal = 0;
     const validatedItems = [];
@@ -391,7 +386,8 @@ app.post('/api/orders', async (req, res) => {
     }
 
     const tokenNo = getNextTokenNumber();
-    const finalPaymentStatus = (finalPaymentMethod === 'CREDIT') ? 'PENDING' : 'PAID';
+    // Online cash orders remain PENDING until cashier confirms receipt at Counter 1
+    const finalPaymentStatus = (finalPaymentMethod === 'CREDIT' || (finalPaymentMethod === 'CASH' && finalOrderType === 'ONLINE')) ? 'PENDING' : 'PAID';
     const cleanCustomerName = customer_name.trim();
     const cleanCustomerDesk = customer_desk && customer_desk.trim() ? customer_desk.trim() : (finalOrderType === 'COUNTER' ? 'Counter 1 POS' : '');
     const cleanCustomerPhone = customer_phone ? customer_phone.trim() : '';
