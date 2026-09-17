@@ -2690,7 +2690,7 @@ export default function OperatorConsole() {
                                   <table className="w-full text-left text-xs">
                                     <thead className="text-[10px] uppercase font-bold text-slate-400 bg-slate-50 rounded-lg">
                                       <tr>
-                                        <th className="py-1.5 px-2.5 rounded-l-lg">Item & Description</th>
+                                        <th className="py-1.5 px-2.5 rounded-l-lg">Item Name</th>
                                         <th className="py-1.5 px-2 text-center">Qty</th>
                                         <th className="py-1.5 px-2 text-right">Price</th>
                                         <th className="py-1.5 px-2.5 text-right rounded-r-lg">Subtotal</th>
@@ -2704,11 +2704,6 @@ export default function OperatorConsole() {
                                               <span className="font-bold text-slate-800 block">
                                                 {it.item_name || it.name}
                                               </span>
-                                              {it.description && (
-                                                <span className="text-[11px] text-slate-500 italic block leading-tight">
-                                                  {it.description}
-                                                </span>
-                                              )}
                                             </td>
                                             <td className="py-2 px-2 text-center font-mono font-semibold text-slate-700">
                                               {it.quantity}
