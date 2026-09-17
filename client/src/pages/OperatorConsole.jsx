@@ -56,7 +56,7 @@ export default function OperatorConsole() {
     return fetch(url, { ...options, headers });
   };
 
-  // Credit / Khata Ledger State
+  // Credit Ledger State
   const [creditAccounts, setCreditAccounts] = useState([]);
   const [creditStats, setCreditStats] = useState({ total_due: 0, active_debtors: 0, settled_week: 0 });
   const [creditSearch, setCreditSearch] = useState('');
@@ -246,7 +246,7 @@ export default function OperatorConsole() {
     setPinInput('');
   };
 
-  // Khata / Credit Ledger Actions
+  // Credit Ledger Actions
   const loadCreditData = async () => {
     try {
       const [accRes, statsRes] = await Promise.all([
@@ -518,7 +518,7 @@ export default function OperatorConsole() {
 
   const posTotal = posCart.reduce((sum, i) => sum + (i.price * i.quantity), 0);
 
-  // Fast-POS Checkout (Cash, UPI, or Khata Credit)
+  // Fast-POS Checkout (Cash, UPI, or Credit)
   const submitPosOrder = async (payMethod, overrideName) => {
     if (posCart.length === 0) return;
     setPosSubmitting(true);
@@ -714,7 +714,7 @@ export default function OperatorConsole() {
               </span>
             </div>
             <div>
-              <span className="text-slate-400 block font-medium">📋 Weekly Khata Due</span>
+              <span className="text-slate-400 block font-medium">📋 Weekly Credit Due</span>
               <span className="text-base sm:text-lg font-bold text-indigo-600">
                 ₹{creditStats?.total_due || 0}
               </span>
@@ -818,7 +818,7 @@ export default function OperatorConsole() {
               }`}
             >
               <BookOpen className="w-4 h-4" />
-              <span>Weekly Khata</span>
+              <span>Weekly Credit</span>
               {creditStats.total_due > 0 && (
                 <span className="px-1.5 py-0.5 rounded-full text-[10px] font-black bg-rose-500 text-white">
                   ₹{creditStats.total_due}
@@ -990,7 +990,7 @@ export default function OperatorConsole() {
                           )}
                           {order.payment_method === 'CREDIT' && (
                             <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-800">
-                              📋 Staff Khata Tab
+                              📋 Staff Credit Tab
                             </span>
                           )}
                           {order.customer_utr && (
@@ -1100,7 +1100,7 @@ export default function OperatorConsole() {
                           )}
                           {order.payment_method === 'CREDIT' && (
                             <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-800">
-                              📋 Staff Khata Tab
+                              📋 Staff Credit Tab
                             </span>
                           )}
                           {order.customer_utr && (
@@ -1198,7 +1198,7 @@ export default function OperatorConsole() {
                           )}
                           {order.payment_method === 'CREDIT' && (
                             <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-800">
-                              📋 Staff Khata Tab
+                              📋 Staff Credit Tab
                             </span>
                           )}
                         </div>
@@ -1438,7 +1438,7 @@ export default function OperatorConsole() {
                     }}
                     className="py-3 px-2 rounded-2xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 disabled:opacity-50 text-white font-black text-xs shadow-md shadow-indigo-600/20 transition-all flex flex-col items-center justify-center"
                   >
-                    <span>📋 KHATA</span>
+                    <span>📋 CREDIT</span>
                     <span className="text-[10px] font-normal opacity-90">Weekly Tab</span>
                   </button>
                 </div>
@@ -1595,9 +1595,9 @@ export default function OperatorConsole() {
           </div>
         )}
 
-        {/* ================= VIEW 4: WEEKLY KHATA / CREDIT LEDGER ================= */}
+        {/* ================= VIEW 4: WEEKLY CREDIT LEDGER ================= */}
         {tab === 'credit' && (
-          <div className="space-y-4 animate-fade-in">
+          <div className="space-y-6 animate-fade-in">
             {/* Top Metric Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
               <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
@@ -1658,7 +1658,7 @@ export default function OperatorConsole() {
                 <div>
                   <h2 className="text-lg font-black text-slate-900 flex items-center space-x-2">
                     <BookOpen className="w-5 h-5 text-indigo-600" />
-                    <span>Weekly Credit Accounts (Khata Ledger)</span>
+                    <span>Weekly Credit Accounts (Credit Ledger)</span>
                   </h2>
                   <p className="text-xs text-slate-500 mt-0.5">
                     Track weekly canteen tabs by employee, view order items, and record payments.
@@ -1768,7 +1768,7 @@ export default function OperatorConsole() {
                   <BookOpen className="w-10 h-10 mx-auto text-slate-300" />
                   <p className="text-sm font-semibold text-slate-600">No Credit Accounts Registered Yet</p>
                   <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                    Click "Register Staff Member" or bill an order via "Fast-POS ➔ KHATA" to start an employee's weekly tab.
+                    Click "Register Staff Member" or bill an order via "Fast-POS ➔ CREDIT" to start an employee's weekly tab.
                   </p>
                 </div>
               )}
@@ -2294,7 +2294,7 @@ export default function OperatorConsole() {
                   </div>
                   <div>
                     <h3 className="font-extrabold text-base tracking-tight">{selectedLedger}</h3>
-                    <p className="text-xs text-slate-300">Staff Credit & Weekly Khata Ledger</p>
+                    <p className="text-xs text-slate-300">Staff Weekly Credit Ledger</p>
                   </div>
                 </div>
                 <button

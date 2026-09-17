@@ -825,7 +825,7 @@ export default function CustomerMenu({
                         <div className="mt-3 p-3.5 rounded-2xl bg-indigo-50 border border-indigo-200 text-xs text-indigo-900 space-y-2.5 animate-fade-in">
                           <div className="font-bold flex items-center gap-1.5 text-indigo-800">
                             <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0" />
-                            <span>Staff Credit (Weekly Khata Tab)</span>
+                            <span>Staff Credit (Weekly Tab)</span>
                           </div>
                           <p className="text-indigo-700 leading-tight">
                             This order (₹{cartSubtotal}) will be charged to your weekly staff account.

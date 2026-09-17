@@ -162,7 +162,7 @@ async function runTests() {
     assert(negativeQty.status === 201 && negativeQty.body.items[0].quantity === 1,
       'Sanitizes negative quantity to 1 via Math.max(1, ...)');
 
-    console.log('\n--- Suite 5: Fast-POS Credit & Staff Khata Orders ---');
+    console.log('\n--- Suite 5: Fast-POS Credit & Staff Credit Orders ---');
     // Fast-POS Credit Order WITHOUT phone (Verifies Bug 1 Fix!)
     const posCreditOrder = await request('POST', '/api/orders', {
       customer_name: 'Faculty Sharma',

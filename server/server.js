@@ -432,7 +432,7 @@ app.post('/api/orders', async (req, res) => {
         itemInsert.run(orderId, vi.menu_item_id, vi.item_name, vi.price, vi.quantity, vi.total_price);
       }
 
-      // If placed on Credit / Khata, automatically update customer credit account
+      // If placed on Credit, automatically update customer credit account
       if (finalPaymentMethod === 'CREDIT') {
         const existingAcc = db.prepare('SELECT * FROM credit_accounts WHERE LOWER(customer_name) = LOWER(?)').get(cleanCustomerName);
         if (existingAcc) {
@@ -540,7 +540,7 @@ app.patch('/api/orders/:id/status', requireOperatorAuth, (req, res) => {
   res.json(updatedOrder);
 });
 
-// ---------------- KHATA / CREDIT LEDGER API ROUTES ----------------
+// ---------------- CREDIT LEDGER API ROUTES ----------------
 
 // GET /api/credit/accounts - List all customer credit ledger accounts
 app.get('/api/credit/accounts', (req, res) => {
@@ -663,7 +663,7 @@ app.post('/api/credit/settle', requireOperatorAuth, (req, res) => {
   res.json({ success: true, customer_name: account.customer_name, new_balance: newBalance });
 });
 
-// GET /api/credit/stats - Summary metrics for Khata
+// GET /api/credit/stats - Summary metrics for Credit
 app.get('/api/credit/stats', (req, res) => {
   const totalDue = db.prepare('SELECT COALESCE(SUM(balance), 0) as total_due FROM credit_accounts WHERE balance > 0').get().total_due;
   const activeDebtors = db.prepare('SELECT COUNT(*) as count FROM credit_accounts WHERE balance > 0').get().count;
