@@ -13,22 +13,31 @@ export default function Navbar({ currentView, setView, cartCount, setIsCartOpen,
 
   return (
     <>
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-sm transition-all">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
+      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-sm transition-all w-full">
+        <div className="max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-14 sm:h-16 gap-1.5 sm:gap-4">
             {/* Brand Logo & Name */}
-            <div className="flex items-center space-x-3 cursor-pointer" onClick={() => setView('customer')}>
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-orange-600 to-amber-500 flex items-center justify-center text-white shadow-md shadow-orange-500/20">
-                <Utensils className="w-5 h-5 stroke-[2.5]" />
+            <div 
+              className="flex items-center space-x-2 sm:space-x-3 cursor-pointer shrink-0 min-w-0" 
+              onClick={() => setView('customer')}
+            >
+              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-orange-600 to-amber-500 flex items-center justify-center text-white shadow-md shadow-orange-500/20 shrink-0">
+                <Utensils className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.5]" />
               </div>
-              <div>
-                <div className="flex items-center space-x-2">
-                  <span className="font-extrabold text-lg tracking-tight text-slate-900">BMU Canteen</span>
-                  <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-orange-100 text-orange-800">
+              <div className="min-w-0">
+                <div className="flex items-center space-x-1.5 sm:space-x-2">
+                  <span className="font-extrabold text-base sm:text-lg tracking-tight text-slate-900 truncate">
+                    BMU Canteen
+                  </span>
+                  <span className="hidden lg:inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-orange-100 text-orange-800 shrink-0">
                     Campus QuickBite
                   </span>
+                  <span 
+                    className={`w-2 h-2 rounded-full sm:hidden shrink-0 ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}
+                    title={isConnected ? 'Live Connected' : 'Offline'}
+                  />
                 </div>
-                <div className="flex items-center space-x-1.5 text-xs text-slate-500">
+                <div className="hidden sm:flex items-center space-x-1.5 text-xs text-slate-500">
                   <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></span>
                   <span>{isConnected ? 'Live Connected' : 'Offline'}</span>
                 </div>
@@ -36,70 +45,77 @@ export default function Navbar({ currentView, setView, cartCount, setIsCartOpen,
             </div>
 
             {/* Right Header Navigation & Actions */}
-            <div className="flex items-center space-x-2">
-              <nav className="flex items-center space-x-1 sm:space-x-2 bg-slate-100 p-1 rounded-xl border border-slate-200/80 text-xs sm:text-sm font-medium">
+            <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
+              <nav className="flex items-center space-x-0.5 sm:space-x-1.5 bg-slate-100 p-0.5 sm:p-1 rounded-xl border border-slate-200/80 text-xs sm:text-sm font-medium shrink-0">
                 <button
                   onClick={() => setView('customer')}
-                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg transition-all ${
+                  className={`flex items-center space-x-1 px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-lg transition-all ${
                     currentView === 'customer'
                       ? 'bg-white text-orange-600 font-semibold shadow-sm'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
                   }`}
+                  title="Menu"
                 >
-                  <Utensils className="w-4 h-4" />
-                  <span>Menu</span>
+                  <Utensils className="w-4 h-4 shrink-0" />
+                  <span className="hidden sm:inline">Menu</span>
                 </button>
 
                 <button
                   onClick={() => setView('display')}
-                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg transition-all ${
+                  className={`flex items-center space-x-1 px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-lg transition-all ${
                     currentView === 'display'
                       ? 'bg-emerald-700 text-white font-semibold shadow-sm'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
                   }`}
+                  title="Public TV Display Board"
                 >
-                  <Monitor className="w-4 h-4 text-emerald-400" />
-                  <span>TV Board</span>
+                  <Monitor className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span className="hidden sm:inline">TV Board</span>
+                  <span className="sm:hidden text-[11px] font-bold">TV</span>
                 </button>
 
                 {/* QR Barcode Button */}
                 <button
                   onClick={() => setShowQrModal(true)}
-                  className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-200/60 transition-all"
+                  className="flex items-center space-x-1 px-2 py-1.5 sm:px-2.5 sm:py-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-200/60 transition-all"
                   title="Scan QR Code to open on phone"
                 >
-                  <QrCode className="w-4 h-4 text-orange-500" />
+                  <QrCode className="w-4 h-4 text-orange-500 shrink-0" />
                   <span className="hidden md:inline">Scan QR</span>
                 </button>
 
                 {/* If currently in Operator mode, show active badge; otherwise show discreet staff lock */}
                 {currentView === 'operator' ? (
-                  <span className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-slate-900 text-white font-semibold shadow-sm">
-                    <LayoutDashboard className="w-4 h-4 text-orange-400" />
-                    <span>Operator POS</span>
+                  <span className="flex items-center space-x-1 px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg bg-slate-900 text-white font-semibold shadow-sm">
+                    <LayoutDashboard className="w-4 h-4 text-orange-400 shrink-0" />
+                    <span className="hidden sm:inline">Operator POS</span>
+                    <span className="sm:hidden text-[10px]">POS</span>
                   </span>
                 ) : (
                   <button
                     onClick={() => setView('operator')}
-                    className="p-1.5 px-2 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/50 transition-colors"
+                    className="p-1.5 sm:px-2 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/50 transition-colors"
                     title="Staff Only Access"
                     aria-label="Staff Login"
                   >
-                    <span className="text-[11px] font-medium text-slate-400 hover:text-slate-600">🔒 Staff</span>
+                    <span className="text-[11px] font-medium text-slate-500 hover:text-slate-700 flex items-center gap-0.5">
+                      🔒<span className="hidden sm:inline"> Staff</span>
+                    </span>
                   </button>
                 )}
               </nav>
 
-              {/* Cart Trigger (visible in Customer view) */}
+              {/* Cart Trigger (visible in Customer view) - Pinned & always within range */}
               {currentView === 'customer' && (
                 <button
                   onClick={() => setIsCartOpen(true)}
-                  className="relative flex items-center justify-center p-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 active:scale-95 text-white transition-all shadow-md shadow-orange-500/25"
+                  className="relative flex items-center justify-center p-2 sm:p-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 active:scale-95 text-white transition-all shadow-md shadow-orange-500/25 shrink-0 ml-0.5"
                   aria-label="View Cart"
+                  title="View Cart"
                 >
-                  <ShoppingBag className="w-5 h-5" />
+                  <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
                   {cartCount > 0 && (
-                    <span className="absolute -top-1.5 -right-1.5 bg-slate-900 text-white text-[11px] font-bold w-5 h-5 rounded-full flex items-center justify-center border-2 border-white shadow-sm animate-bounce">
+                    <span className="absolute -top-1.5 -right-1.5 bg-slate-900 text-white text-[10px] sm:text-[11px] font-bold min-w-[1.125rem] h-4.5 sm:min-w-[1.25rem] sm:h-5 px-1 rounded-full flex items-center justify-center border-2 border-white shadow-sm animate-bounce">
                       {cartCount}
                     </span>
                   )}
