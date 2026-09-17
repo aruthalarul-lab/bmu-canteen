@@ -30,12 +30,12 @@ export default function CustomerMenu({
   const [dietFilter, setDietFilter] = useState('ALL'); // 'ALL', 'VEG', 'NON_VEG'
   const [loading, setLoading] = useState(true);
 
-  // View mode: 'tile', 'list', 'compact'
+  // View mode: 'list' (default), 'tile', 'compact'
   const [viewMode, setViewMode] = useState(() => {
     try {
-      return localStorage.getItem('bmu_customer_view_mode') || 'tile';
+      return localStorage.getItem('bmu_customer_view_mode') || 'list';
     } catch (e) {
-      return 'tile';
+      return 'list';
     }
   });
   const [inStockOnly, setInStockOnly] = useState(false);
@@ -517,8 +517,21 @@ export default function CustomerMenu({
             </button>
           </div>
 
-          {/* Right: Mobile View Options (Tile, List, Compact) */}
+          {/* Right: Mobile View Options (List, Tile, Compact) */}
           <div className="flex items-center bg-white p-1 rounded-xl border border-slate-200 shadow-xs space-x-1">
+            <button
+              type="button"
+              onClick={() => handleViewModeChange('list')}
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                viewMode === 'list'
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+              title="List View (Default)"
+            >
+              <List className="w-3.5 h-3.5" />
+              <span>List</span>
+            </button>
             <button
               type="button"
               onClick={() => handleViewModeChange('tile')}
@@ -531,19 +544,6 @@ export default function CustomerMenu({
             >
               <LayoutGrid className="w-3.5 h-3.5" />
               <span>Tile</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleViewModeChange('list')}
-              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                viewMode === 'list'
-                  ? 'bg-slate-900 text-white shadow-xs'
-                  : 'text-slate-600 hover:bg-slate-100'
-              }`}
-              title="List View"
-            >
-              <List className="w-3.5 h-3.5" />
-              <span>List</span>
             </button>
             <button
               type="button"
