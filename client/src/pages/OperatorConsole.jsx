@@ -1635,6 +1635,7 @@ export default function OperatorConsole() {
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {menuItems
                   .filter(i => posCategory === 'ALL' || String(i.category_id) === String(posCategory))
+                  .sort((a, b) => (b.is_available === 1 ? 1 : 0) - (a.is_available === 1 ? 1 : 0))
                   .map(item => {
                     const isAvailable = item.is_available === 1;
                     return (

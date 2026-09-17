@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Search, Plus, Minus, ShoppingBag, Clock, CheckCircle2, 
   Sparkles, AlertCircle, ArrowRight, X, Phone, User, MapPin,
-  RefreshCw, Check, CreditCard
+  RefreshCw, Check, CreditCard, LayoutGrid, List, AlignJustify, Utensils
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { playOrderReadySound } from '../utils/audio';
@@ -29,6 +29,23 @@ export default function CustomerMenu({
   const [searchQuery, setSearchQuery] = useState('');
   const [dietFilter, setDietFilter] = useState('ALL'); // 'ALL', 'VEG', 'NON_VEG'
   const [loading, setLoading] = useState(true);
+
+  // View mode: 'tile', 'list', 'compact'
+  const [viewMode, setViewMode] = useState(() => {
+    try {
+      return localStorage.getItem('bmu_customer_view_mode') || 'tile';
+    } catch (e) {
+      return 'tile';
+    }
+  });
+  const [inStockOnly, setInStockOnly] = useState(false);
+
+  const handleViewModeChange = (mode) => {
+    setViewMode(mode);
+    try {
+      localStorage.setItem('bmu_customer_view_mode', mode);
+    } catch (e) {}
+  };
 
   // Customer Details Form
   const [customerName, setCustomerName] = useState(() => localStorage.getItem('bmu_customer_name') || '');
@@ -128,18 +145,29 @@ export default function CustomerMenu({
   const cartSubtotal = safeCart.reduce((sum, i) => sum + ((i.price || 0) * (i.quantity || 1)), 0);
   const cartItemCount = safeCart.reduce((sum, i) => sum + (i.quantity || 1), 0);
 
-  // Filter items
-  const filteredItems = safeItems.filter(item => {
-    if (!item) return false;
-    const matchesCategory = selectedCategory === 'ALL' || String(item.category_id) === String(selectedCategory);
-    const matchesDiet = 
-      dietFilter === 'ALL' ? true :
-      dietFilter === 'VEG' ? item.is_veg === 1 :
-      item.is_veg === 0;
-    const q = (searchQuery || '').toLowerCase().trim();
-    const matchesSearch = !q || (item.name || '').toLowerCase().includes(q) || ((item.description || '').toLowerCase().includes(q));
-    return matchesCategory && matchesSearch && matchesDiet;
-  });
+  // Filter & sort items (in-stock items prioritized on top)
+  const filteredItems = safeItems
+    .filter(item => {
+      if (!item) return false;
+      const matchesCategory = selectedCategory === 'ALL' || String(item.category_id) === String(selectedCategory);
+      const matchesDiet = 
+        dietFilter === 'ALL' ? true :
+        dietFilter === 'VEG' ? item.is_veg === 1 :
+        item.is_veg === 0;
+      const matchesInStock = inStockOnly ? item.is_available === 1 : true;
+      const q = (searchQuery || '').toLowerCase().trim();
+      const matchesSearch = !q || (item.name || '').toLowerCase().includes(q) || ((item.description || '').toLowerCase().includes(q));
+      return matchesCategory && matchesSearch && matchesDiet && matchesInStock;
+    })
+    .sort((a, b) => {
+      // In-stock items strictly on top:
+      const aStock = a.is_available === 1 ? 1 : 0;
+      const bStock = b.is_available === 1 ? 1 : 0;
+      if (bStock !== aStock) {
+        return bStock - aStock; // 1 (in-stock) comes before 0 (sold out)
+      }
+      return 0;
+    });
 
   // Fetch UPI preview QR when drawer is open and UPI is selected
   useEffect(() => {
@@ -467,7 +495,73 @@ export default function CustomerMenu({
           })}
         </div>
 
-        {/* Menu Items Grid */}
+        {/* Menu Controls Toolbar (In-Stock filter & View Switcher) */}
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pt-1">
+          {/* Left: Item count & In-stock quick filter */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-slate-500">
+              {filteredItems.length} item{filteredItems.length !== 1 ? 's' : ''}
+            </span>
+            <button
+              type="button"
+              onClick={() => setInStockOnly(prev => !prev)}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold transition-all border ${
+                inStockOnly 
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-300 shadow-xs' 
+                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+              }`}
+              title="Show only in-stock items"
+            >
+              <span className={`w-2 h-2 rounded-full ${inStockOnly ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`}></span>
+              <span>In Stock Only</span>
+            </button>
+          </div>
+
+          {/* Right: Mobile View Options (Tile, List, Compact) */}
+          <div className="flex items-center bg-white p-1 rounded-xl border border-slate-200 shadow-xs space-x-1">
+            <button
+              type="button"
+              onClick={() => handleViewModeChange('tile')}
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                viewMode === 'tile'
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+              title="Tile Grid View"
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              <span>Tile</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleViewModeChange('list')}
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                viewMode === 'list'
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+              title="List View"
+            >
+              <List className="w-3.5 h-3.5" />
+              <span>List</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleViewModeChange('compact')}
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                viewMode === 'compact'
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+              title="Compact View"
+            >
+              <AlignJustify className="w-3.5 h-3.5" />
+              <span>Compact</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Menu Items Render */}
         {loading ? (
           <div className="py-16 text-center text-slate-400">
             <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-orange-500" />
@@ -481,8 +575,9 @@ export default function CustomerMenu({
             <h3 className="font-bold text-slate-800">No items found</h3>
             <p className="text-xs text-slate-500 mt-1">Try clearing filters or search query.</p>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+        ) : viewMode === 'list' ? (
+          /* ================= VIEW: LIST ================= */
+          <div className="space-y-2.5 sm:space-y-3">
             {filteredItems.map(item => {
               const inCart = cart.find(c => c.id === item.id);
               const isAvailable = item.is_available === 1;
@@ -490,82 +585,74 @@ export default function CustomerMenu({
               return (
                 <div
                   key={item.id}
-                  className={`bg-white rounded-2xl border p-4 flex flex-col justify-between transition-all duration-200 shadow-sm ${
+                  className={`bg-white rounded-2xl border p-3 sm:p-4 flex items-center justify-between gap-3 transition-all duration-200 shadow-xs ${
                     !isAvailable 
                       ? 'opacity-60 bg-slate-50 border-slate-200 grayscale-[40%]' 
                       : 'hover:shadow-md hover:border-orange-200 border-slate-200/80'
                   }`}
                 >
-                  <div>
-                    {/* Item Header / Badges */}
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center space-x-2">
-                        <span className="text-2xl select-none" role="img" aria-label={item.name}>
-                          {item.image_emoji || '🍲'}
+                  {/* Left: Thumbnail Emoji with Veg Badge */}
+                  <div className="relative shrink-0 w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-orange-50/70 border border-orange-100 flex items-center justify-center text-2xl sm:text-3xl select-none">
+                    {item.image_emoji || '🍲'}
+                    <div className="absolute -top-1 -right-1">
+                      {item.is_veg === 1 ? (
+                        <span className="w-3.5 h-3.5 rounded-sm border border-emerald-600 bg-white flex items-center justify-center p-0.5 shadow-xs" title="Pure Veg">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
                         </span>
-                        <div>
-                          <div className="flex items-center space-x-1.5">
-                            {item.is_veg === 1 ? (
-                              <span className="w-3.5 h-3.5 rounded-sm border border-emerald-600 bg-white flex items-center justify-center p-0.5 shrink-0" title="Pure Veg">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
-                              </span>
-                            ) : (
-                              <span className="w-3.5 h-3.5 rounded-sm border border-rose-600 bg-white flex items-center justify-center p-0.5 shrink-0" title="Non-Veg">
-                                <span className="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
-                              </span>
-                            )}
-                            <h3 className="font-bold text-slate-900 text-sm sm:text-base leading-tight">
-                              {item.name}
-                            </h3>
-                          </div>
-                          <span className="text-[11px] font-medium text-slate-400">
-                            {item.category_name}
-                          </span>
-                        </div>
-                      </div>
+                      ) : (
+                        <span className="w-3.5 h-3.5 rounded-sm border border-rose-600 bg-white flex items-center justify-center p-0.5 shadow-xs" title="Non-Veg">
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
 
-                      {/* Stock Status Badge */}
+                  {/* Middle: Details */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-slate-900 text-sm sm:text-base truncate">
+                        {item.name}
+                      </h3>
                       {!isAvailable && (
-                        <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-rose-100 text-rose-700 border border-rose-200">
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase bg-rose-100 text-rose-700 border border-rose-200 shrink-0">
                           Sold Out
                         </span>
                       )}
                     </div>
-
-                    {/* Description */}
-                    {item.description && (
-                      <p className="text-xs text-slate-500 mt-2.5 line-clamp-2 leading-relaxed">
-                        {item.description}
-                      </p>
-                    )}
+                    <div className="flex items-center gap-2 text-xs text-slate-400 mt-0.5">
+                      <span className="font-medium text-slate-400">{item.category_name}</span>
+                      {item.description && (
+                        <>
+                          <span>•</span>
+                          <span className="truncate max-w-[160px] sm:max-w-xs text-slate-500">{item.description}</span>
+                        </>
+                      )}
+                    </div>
+                    <div className="font-extrabold text-sm sm:text-base text-slate-900 mt-1">
+                      ₹{item.price}
+                    </div>
                   </div>
 
-                  {/* Price & Action Row */}
-                  <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-100">
-                    <div>
-                      <span className="text-xs text-slate-400 font-medium">Price</span>
-                      <div className="font-extrabold text-base sm:text-lg text-slate-900 leading-none">
-                        ₹{item.price}
-                      </div>
-                    </div>
-
-                    {/* Add / Quantity Stepper Button */}
+                  {/* Right: Quantity Stepper or Add Button */}
+                  <div className="shrink-0">
                     {!isAvailable ? (
-                      <span className="text-xs font-semibold text-slate-400 italic">Unavailable</span>
+                      <span className="px-2.5 py-1 rounded-lg text-xs font-bold text-slate-400 bg-slate-100 border border-slate-200">
+                        Unavailable
+                      </span>
                     ) : inCart ? (
-                      <div className="flex items-center space-x-2 bg-orange-50 border border-orange-200 rounded-xl p-1">
+                      <div className="flex items-center space-x-1.5 bg-orange-50 border border-orange-200 rounded-xl p-1">
                         <button
                           onClick={() => updateQuantity(item.id, inCart.quantity - 1)}
-                          className="w-7 h-7 rounded-lg bg-white text-orange-600 shadow-sm flex items-center justify-center hover:bg-orange-100 transition-colors"
+                          className="w-7 h-7 rounded-lg bg-white text-orange-600 shadow-xs flex items-center justify-center hover:bg-orange-100 transition-colors"
                         >
                           <Minus className="w-3.5 h-3.5" />
                         </button>
-                        <span className="font-bold text-sm text-slate-900 min-w-[20px] text-center">
+                        <span className="font-bold text-xs sm:text-sm text-slate-900 min-w-[20px] text-center">
                           {inCart.quantity}
                         </span>
                         <button
                           onClick={() => addToCart(item)}
-                          className="w-7 h-7 rounded-lg bg-orange-500 text-white shadow-sm flex items-center justify-center hover:bg-orange-600 transition-colors"
+                          className="w-7 h-7 rounded-lg bg-orange-500 text-white shadow-xs flex items-center justify-center hover:bg-orange-600 transition-colors"
                         >
                           <Plus className="w-3.5 h-3.5" />
                         </button>
@@ -573,7 +660,187 @@ export default function CustomerMenu({
                     ) : (
                       <button
                         onClick={() => addToCart(item)}
-                        className="px-3.5 py-1.5 rounded-xl bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-bold text-xs sm:text-sm transition-all shadow-sm flex items-center space-x-1"
+                        className="px-3.5 py-1.5 rounded-xl bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-bold text-xs sm:text-sm transition-all shadow-xs flex items-center space-x-1"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>ADD</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : viewMode === 'compact' ? (
+          /* ================= VIEW: COMPACT ================= */
+          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs divide-y divide-slate-100 overflow-hidden">
+            {filteredItems.map(item => {
+              const inCart = cart.find(c => c.id === item.id);
+              const isAvailable = item.is_available === 1;
+
+              return (
+                <div
+                  key={item.id}
+                  className={`p-3 flex items-center justify-between gap-2 hover:bg-slate-50/80 transition-colors ${
+                    !isAvailable ? 'opacity-60 bg-slate-50/50' : ''
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    {item.is_veg === 1 ? (
+                      <span className="w-3.5 h-3.5 rounded-sm border border-emerald-600 bg-white flex items-center justify-center p-0.5 shrink-0" title="Pure Veg">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                      </span>
+                    ) : (
+                      <span className="w-3.5 h-3.5 rounded-sm border border-rose-600 bg-white flex items-center justify-center p-0.5 shrink-0" title="Non-Veg">
+                        <span className="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
+                      </span>
+                    )}
+                    <span className="text-xl select-none shrink-0" role="img" aria-label={item.name}>
+                      {item.image_emoji || '🍲'}
+                    </span>
+                    <div className="min-w-0">
+                      <span className="font-bold text-xs sm:text-sm text-slate-900 block truncate">
+                        {item.name}
+                      </span>
+                      <span className="text-[10px] text-slate-400 block truncate">
+                        {item.category_name}
+                      </span>
+                    </div>
+                    {!isAvailable && (
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase bg-rose-100 text-rose-700 border border-rose-200 shrink-0">
+                        Sold Out
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className="font-extrabold text-xs sm:text-sm text-slate-900 min-w-[45px] text-right">
+                      ₹{item.price}
+                    </span>
+                    {!isAvailable ? (
+                      <span className="text-[10px] font-bold text-slate-400 italic">Unavailable</span>
+                    ) : inCart ? (
+                      <div className="flex items-center space-x-1 bg-orange-50 border border-orange-200 rounded-lg p-0.5">
+                        <button
+                          onClick={() => updateQuantity(item.id, inCart.quantity - 1)}
+                          className="w-5 h-5 rounded bg-white text-orange-600 flex items-center justify-center text-xs font-bold"
+                        >
+                          -
+                        </button>
+                        <span className="font-bold text-xs text-slate-900 min-w-[14px] text-center">
+                          {inCart.quantity}
+                        </span>
+                        <button
+                          onClick={() => addToCart(item)}
+                          className="w-5 h-5 rounded bg-orange-500 text-white flex items-center justify-center text-xs font-bold"
+                        >
+                          +
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => addToCart(item)}
+                        className="px-2.5 py-1 rounded-lg bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs shadow-xs"
+                      >
+                        + ADD
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          /* ================= VIEW: TILE (DEFAULT) ================= */
+          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-6">
+            {filteredItems.map(item => {
+              const inCart = cart.find(c => c.id === item.id);
+              const isAvailable = item.is_available === 1;
+
+              return (
+                <div
+                  key={item.id}
+                  className={`bg-white rounded-2xl border p-3 sm:p-4 flex flex-col justify-between transition-all duration-200 shadow-xs ${
+                    !isAvailable 
+                      ? 'opacity-60 bg-slate-50 border-slate-200 grayscale-[40%]' 
+                      : 'hover:shadow-md hover:border-orange-200 border-slate-200/80'
+                  }`}
+                >
+                  <div>
+                    {/* Item Header / Badges */}
+                    <div className="flex items-start justify-between gap-1.5">
+                      <span className="text-2xl sm:text-3xl select-none" role="img" aria-label={item.name}>
+                        {item.image_emoji || '🍲'}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        {item.is_veg === 1 ? (
+                          <span className="w-3.5 h-3.5 rounded-sm border border-emerald-600 bg-white flex items-center justify-center p-0.5 shrink-0" title="Pure Veg">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                          </span>
+                        ) : (
+                          <span className="w-3.5 h-3.5 rounded-sm border border-rose-600 bg-white flex items-center justify-center p-0.5 shrink-0" title="Non-Veg">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
+                          </span>
+                        )}
+                        {!isAvailable && (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase bg-rose-100 text-rose-700 border border-rose-200">
+                            Sold Out
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="mt-2">
+                      <h3 className="font-bold text-slate-900 text-xs sm:text-base leading-snug line-clamp-2 min-h-[2rem] sm:min-h-0">
+                        {item.name}
+                      </h3>
+                      <span className="text-[10px] sm:text-xs font-medium text-slate-400 block truncate">
+                        {item.category_name}
+                      </span>
+                    </div>
+
+                    {/* Description (desktop / tablets) */}
+                    {item.description && (
+                      <p className="hidden sm:block text-xs text-slate-500 mt-2 line-clamp-2 leading-relaxed">
+                        {item.description}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Price & Action Row */}
+                  <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-slate-100">
+                    <div>
+                      <span className="hidden sm:block text-[10px] text-slate-400 font-medium">Price</span>
+                      <div className="font-extrabold text-sm sm:text-lg text-slate-900 leading-none">
+                        ₹{item.price}
+                      </div>
+                    </div>
+
+                    {/* Add / Quantity Stepper Button */}
+                    {!isAvailable ? (
+                      <span className="text-[11px] font-bold text-slate-400 italic">Sold Out</span>
+                    ) : inCart ? (
+                      <div className="flex items-center space-x-1 sm:space-x-2 bg-orange-50 border border-orange-200 rounded-xl p-0.5 sm:p-1">
+                        <button
+                          onClick={() => updateQuantity(item.id, inCart.quantity - 1)}
+                          className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-white text-orange-600 shadow-xs flex items-center justify-center hover:bg-orange-100 transition-colors"
+                        >
+                          <Minus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                        </button>
+                        <span className="font-bold text-xs sm:text-sm text-slate-900 min-w-[16px] sm:min-w-[20px] text-center">
+                          {inCart.quantity}
+                        </span>
+                        <button
+                          onClick={() => addToCart(item)}
+                          className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-orange-500 text-white shadow-xs flex items-center justify-center hover:bg-orange-600 transition-colors"
+                        >
+                          <Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => addToCart(item)}
+                        className="px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-xl bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-bold text-xs sm:text-sm transition-all shadow-xs flex items-center space-x-1"
                       >
                         <Plus className="w-3.5 h-3.5" />
                         <span>ADD</span>
