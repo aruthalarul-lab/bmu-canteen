@@ -49,20 +49,20 @@ export default function Navbar({ currentView, setView, cartCount, setIsCartOpen,
               <nav className="flex items-center space-x-0.5 sm:space-x-1.5 bg-slate-100 p-0.5 sm:p-1 rounded-xl border border-slate-200/80 text-xs sm:text-sm font-medium shrink-0">
                 <button
                   onClick={() => setView('customer')}
-                  className={`flex items-center space-x-1 px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-lg transition-all ${
+                  className={`flex items-center space-x-1 px-2.5 py-1.5 sm:px-3 sm:py-1.5 rounded-lg transition-all ${
                     currentView === 'customer'
-                      ? 'bg-white text-orange-600 font-semibold shadow-sm'
+                      ? 'bg-white text-orange-600 font-bold shadow-sm'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
                   }`}
                   title="Menu"
                 >
                   <Utensils className="w-4 h-4 shrink-0" />
-                  <span className="hidden sm:inline">Menu</span>
+                  <span className="text-xs sm:text-sm font-bold">Menu</span>
                 </button>
 
                 <button
                   onClick={() => setView('display')}
-                  className={`flex items-center space-x-1 px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-lg transition-all ${
+                  className={`flex items-center space-x-1 p-1.5 sm:px-3 sm:py-1.5 rounded-lg transition-all ${
                     currentView === 'display'
                       ? 'bg-emerald-700 text-white font-semibold shadow-sm'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
@@ -70,8 +70,7 @@ export default function Navbar({ currentView, setView, cartCount, setIsCartOpen,
                   title="Public TV Display Board"
                 >
                   <Monitor className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span className="hidden sm:inline">TV Board</span>
-                  <span className="sm:hidden text-[11px] font-bold">TV</span>
+                  <span className="hidden md:inline text-xs sm:text-sm">TV Board</span>
                 </button>
 
                 {/* QR Barcode Button */}
