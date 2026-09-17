@@ -334,6 +334,88 @@ app.get('/api/orders/stats', (req, res) => {
   res.json({ ...stats, topItems });
 });
 
+// GET /api/orders/daily-accounting - Complete Daily Accounting with Token Number, Items & Quantities
+app.get('/api/orders/daily-accounting', (req, res) => {
+  try {
+    const targetDate = req.query.date && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date)
+      ? req.query.date
+      : null;
+
+    const dateCondition = targetDate
+      ? "date(created_at, '+5 hours', '+30 minutes') = ?"
+      : "date(created_at, '+5 hours', '+30 minutes') = date('now', '+5 hours', '+30 minutes')";
+    const dateParams = targetDate ? [targetDate] : [];
+
+    // Financial & Order Summary
+    const summary = db.prepare(`
+      SELECT 
+        COUNT(*) as total_orders,
+        COUNT(CASE WHEN status != 'CANCELLED' THEN 1 END) as valid_orders,
+        COALESCE(SUM(CASE WHEN status != 'CANCELLED' THEN total_amount ELSE 0 END), 0) as total_sales,
+        COALESCE(SUM(CASE WHEN payment_method = 'CASH' AND status != 'CANCELLED' THEN total_amount ELSE 0 END), 0) as cash_sales,
+        COALESCE(SUM(CASE WHEN payment_method = 'UPI' AND status != 'CANCELLED' THEN total_amount ELSE 0 END), 0) as upi_sales,
+        COALESCE(SUM(CASE WHEN payment_method = 'CREDIT' AND status != 'CANCELLED' THEN total_amount ELSE 0 END), 0) as credit_sales,
+        COUNT(CASE WHEN status = 'CANCELLED' THEN 1 END) as cancelled_orders,
+        COUNT(CASE WHEN status = 'COMPLETED' THEN 1 END) as completed_orders
+      FROM orders
+      WHERE ${dateCondition}
+    `).get(...dateParams);
+
+    // Total Items Sold Quantity
+    const totalItemsRow = db.prepare(`
+      SELECT COALESCE(SUM(oi.quantity), 0) as total_items_sold
+      FROM order_items oi
+      JOIN orders o ON oi.order_id = o.id
+      WHERE ${targetDate ? "date(o.created_at, '+5 hours', '+30 minutes') = ?" : "date(o.created_at, '+5 hours', '+30 minutes') = date('now', '+5 hours', '+30 minutes')"}
+        AND o.status != 'CANCELLED'
+    `).get(...dateParams);
+    summary.total_items_sold = totalItemsRow ? totalItemsRow.total_items_sold : 0;
+
+    // Item-wise Breakdown (Item Name, Total Quantity Sold, Unit Price, Revenue)
+    const itemSales = db.prepare(`
+      SELECT 
+        oi.item_name,
+        SUM(oi.quantity) as total_quantity,
+        MAX(oi.price) as unit_price,
+        SUM(oi.total_price) as total_revenue
+      FROM order_items oi
+      JOIN orders o ON oi.order_id = o.id
+      WHERE ${targetDate ? "date(o.created_at, '+5 hours', '+30 minutes') = ?" : "date(o.created_at, '+5 hours', '+30 minutes') = date('now', '+5 hours', '+30 minutes')"}
+        AND o.status != 'CANCELLED'
+      GROUP BY oi.item_name
+      ORDER BY total_quantity DESC, total_revenue DESC
+    `).all(...dateParams);
+
+    // All Orders for this date with token_no, customer info, items
+    const orders = db.prepare(`
+      SELECT * FROM orders
+      WHERE ${dateCondition}
+      ORDER BY token_no ASC, id ASC
+    `).all(...dateParams);
+
+    const getItems = db.prepare('SELECT id, item_name, price, quantity, total_price FROM order_items WHERE order_id = ?');
+    const enrichedOrders = orders.map(order => ({
+      ...order,
+      items: getItems.all(order.id),
+    }));
+
+    // Resolved date string
+    const resolvedDateRow = targetDate 
+      ? { target_date: targetDate }
+      : db.prepare("SELECT date('now', '+5 hours', '+30 minutes') as target_date").get();
+
+    res.json({
+      date: resolvedDateRow ? resolvedDateRow.target_date : targetDate,
+      summary,
+      item_sales: itemSales,
+      orders: enrichedOrders,
+    });
+  } catch (err) {
+    console.error('Error in /api/orders/daily-accounting:', err);
+    res.status(500).json({ error: 'Failed to retrieve daily accounting data' });
+  }
+});
+
 // POST /api/orders - Place Order (Online or Counter Fast-POS)
 app.post('/api/orders', async (req, res) => {
   try {
@@ -673,6 +755,277 @@ app.post('/api/credit/settle', requireOperatorAuth, (req, res) => {
   const newBalance = settleTx();
   io.emit('credit-updated', { customer_name: account.customer_name, balance: newBalance });
   res.json({ success: true, customer_name: account.customer_name, new_balance: newBalance });
+});
+
+// GET /api/credit/lookup - Public endpoint for customer to check their own credit statement and dues
+app.get('/api/credit/lookup', (req, res) => {
+  const query = (req.query.query || req.query.phone || req.query.name || '').trim();
+  if (!query) {
+    return res.status(400).json({ error: 'Search query (phone or name) is required' });
+  }
+
+  const numericOnly = query.replace(/\D/g, '');
+  let accounts = [];
+
+  // 1. If numeric query with at least 4 digits, search by phone
+  if (numericOnly.length >= 4) {
+    accounts = db.prepare(`
+      SELECT * FROM credit_accounts 
+      WHERE phone LIKE ? OR phone = ?
+      ORDER BY balance DESC, customer_name ASC
+    `).all(`%${numericOnly}%`, query);
+  }
+
+  // 2. If no accounts found or query is alphabetical, search by customer name
+  if (accounts.length === 0) {
+    accounts = db.prepare(`
+      SELECT * FROM credit_accounts 
+      WHERE LOWER(customer_name) = LOWER(?) OR LOWER(customer_name) LIKE LOWER(?)
+      ORDER BY balance DESC, customer_name ASC
+    `).all(query, `%${query}%`);
+  }
+
+  if (accounts.length === 0) {
+    return res.status(404).json({ error: 'No credit account found for this name or phone number' });
+  }
+
+  // If exactly 1 account matched, return full enriched details (statement + orders)
+  if (accounts.length === 1) {
+    const account = accounts[0];
+    const orders = db.prepare(`
+      SELECT * FROM orders 
+      WHERE LOWER(customer_name) = LOWER(?) AND payment_method = 'CREDIT'
+      ORDER BY id DESC
+    `).all(account.customer_name);
+
+    const getItems = db.prepare(`
+      SELECT id, menu_item_id, item_name, price, quantity, total_price
+      FROM order_items
+      WHERE order_id = ?
+    `);
+
+    const enrichedOrders = orders.map(o => ({
+      ...o,
+      items: getItems.all(o.id)
+    }));
+
+    const settlements = db.prepare(`
+      SELECT * FROM credit_settlements 
+      WHERE LOWER(customer_name) = LOWER(?)
+      ORDER BY id DESC
+    `).all(account.customer_name);
+
+    const pendingSettlement = db.prepare(`
+      SELECT * FROM credit_settlements 
+      WHERE LOWER(customer_name) = LOWER(?) AND status = 'PENDING'
+      ORDER BY id DESC LIMIT 1
+    `).get(account.customer_name);
+
+    return res.json({
+      matchType: 'exact',
+      account,
+      orders: enrichedOrders,
+      settlements,
+      pendingSettlement: pendingSettlement || null
+    });
+  }
+
+  // If multiple accounts matched (e.g. partial name match), return clean candidate list with masked phone
+  res.json({
+    matchType: 'multiple',
+    accounts: accounts.map(a => ({
+      id: a.id,
+      customer_name: a.customer_name,
+      department: a.department,
+      phone: a.phone ? a.phone.replace(/(\d{2})\d{4}(\d{4})/, '$1****$2') : '',
+      balance: a.balance
+    }))
+  });
+});
+
+// GET /api/credit/qr - Generate UPI QR Code & URI for Credit Dues Settlement
+app.get('/api/credit/qr', async (req, res) => {
+  try {
+    const amount = parseFloat(req.query.amount) || 0;
+    const name = (req.query.name || 'BMU Staff').trim();
+    const settings = getSettingsObj();
+    const upiId = settings.upi_id || 'bmucanteen@upi';
+    const upiName = settings.upi_name || 'BMU Canteen';
+    const encodedName = encodeURIComponent(upiName);
+    const safeNote = encodeURIComponent(`Credit_${name.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 20)}`);
+    const upiUri = `upi://pay?pa=${upiId}&pn=${encodedName}&am=${Number(amount).toFixed(2)}&cu=INR&tn=${safeNote}`;
+    
+    const qrDataUrl = await QRCode.toDataURL(upiUri, {
+      width: 320,
+      margin: 1,
+      color: { dark: '#0f172a', light: '#ffffff' },
+    });
+
+    res.json({ upiUri, qrDataUrl, upiId, upiName, amount, customer_name: name });
+  } catch (err) {
+    console.error('Credit UPI preview generation error:', err);
+    res.status(500).json({ error: 'Failed to generate UPI QR' });
+  }
+});
+
+// POST /api/credit/customer-settle - Customer self-settlement via UPI with UTR (Awaiting Operator Verification)
+app.post('/api/credit/customer-settle', (req, res) => {
+  const { customer_name, phone, amount, payment_method, utr, notes } = req.body;
+  const settleAmount = parseFloat(amount);
+  if ((!customer_name && !phone) || isNaN(settleAmount) || settleAmount <= 0) {
+    return res.status(400).json({ error: 'Valid customer name/phone and positive payment amount are required' });
+  }
+
+  const cleanName = (customer_name || '').trim();
+  const cleanPhone = (phone || '').trim();
+  const cleanUtr = (utr || '').trim();
+
+  // Search by exact name, or by phone
+  let account = null;
+  if (cleanName) {
+    account = db.prepare('SELECT * FROM credit_accounts WHERE LOWER(customer_name) = LOWER(?)').get(cleanName);
+  }
+  if (!account && cleanPhone) {
+    account = db.prepare('SELECT * FROM credit_accounts WHERE phone = ? OR phone LIKE ?').get(cleanPhone, `%${cleanPhone.slice(-10)}`);
+  }
+
+  if (!account) {
+    return res.status(404).json({ error: 'Customer credit account not found' });
+  }
+
+  const finalMethod = 'UPI';
+  const finalNotes = cleanUtr ? `Customer UPI Online (UTR: ${cleanUtr})` : (notes || 'Customer UPI Online Settlement');
+
+  // Insert settlement with status 'PENDING' - balance is NOT deducted until operator clicks "Received / Verify"
+  const result = db.prepare(`
+    INSERT INTO credit_settlements (customer_name, amount_paid, payment_method, notes, utr, status)
+    VALUES (?, ?, ?, ?, ?, 'PENDING')
+  `).run(account.customer_name, settleAmount, finalMethod, finalNotes, cleanUtr);
+
+  const settlementId = result.lastInsertRowid;
+
+  // Broadcast to Operator Console that a new customer credit payment needs verification
+  io.emit('credit-settlement-submitted', {
+    id: settlementId,
+    customer_name: account.customer_name,
+    amount_paid: settleAmount,
+    payment_method: finalMethod,
+    utr: cleanUtr,
+    department: account.department || '',
+    phone: account.phone || '',
+    current_balance: account.balance,
+    settled_at: new Date().toISOString()
+  });
+
+  res.json({
+    success: true,
+    status: 'PENDING',
+    settlement_id: settlementId,
+    message: 'Payment submitted! Awaiting cashier verification.',
+    customer_name: account.customer_name,
+    amount_paid: settleAmount,
+    current_balance: account.balance,
+    utr: cleanUtr
+  });
+});
+
+// GET /api/credit/pending-settlements - List all credit settlements awaiting operator confirmation (Requires Operator Auth)
+app.get('/api/credit/pending-settlements', requireOperatorAuth, (req, res) => {
+  const pending = db.prepare(`
+    SELECT cs.*, ca.department, ca.phone, ca.balance as current_balance
+    FROM credit_settlements cs
+    LEFT JOIN credit_accounts ca ON LOWER(cs.customer_name) = LOWER(ca.customer_name)
+    WHERE cs.status = 'PENDING'
+    ORDER BY cs.id DESC
+  `).all();
+  res.json(pending);
+});
+
+// POST /api/credit/settlements/:id/verify - Cashier clicks "Received / Verified" to confirm receipt
+app.post('/api/credit/settlements/:id/verify', requireOperatorAuth, (req, res) => {
+  const settlementId = parseInt(req.params.id);
+  const settlement = db.prepare('SELECT * FROM credit_settlements WHERE id = ?').get(settlementId);
+  if (!settlement) {
+    return res.status(404).json({ error: 'Settlement record not found' });
+  }
+  if (settlement.status === 'VERIFIED') {
+    return res.status(400).json({ error: 'Settlement is already verified' });
+  }
+
+  const account = db.prepare('SELECT * FROM credit_accounts WHERE LOWER(customer_name) = LOWER(?)').get(settlement.customer_name);
+  if (!account) {
+    return res.status(404).json({ error: 'Customer account not found' });
+  }
+
+  const settleTx = db.transaction(() => {
+    // 1. Mark settlement status as VERIFIED
+    db.prepare("UPDATE credit_settlements SET status = 'VERIFIED' WHERE id = ?").run(settlementId);
+
+    // 2. Deduct customer balance
+    const newBalance = Math.max(0, account.balance - settlement.amount_paid);
+    db.prepare(`
+      UPDATE credit_accounts 
+      SET balance = ?, updated_at = CURRENT_TIMESTAMP 
+      WHERE id = ?
+    `).run(newBalance, account.id);
+
+    // 3. If fully cleared or settled, mark pending credit orders as PAID
+    if (newBalance === 0) {
+      db.prepare(`
+        UPDATE orders 
+        SET payment_status = 'PAID', updated_at = CURRENT_TIMESTAMP 
+        WHERE LOWER(customer_name) = LOWER(?) AND payment_method = 'CREDIT' AND payment_status = 'PENDING'
+      `).run(account.customer_name);
+    }
+
+    return newBalance;
+  });
+
+  const newBalance = settleTx();
+
+  // Broadcast real-time events across system
+  io.emit('credit-settlement-verified', {
+    settlement_id: settlementId,
+    customer_name: account.customer_name,
+    amount: settlement.amount_paid,
+    new_balance: newBalance,
+    utr: settlement.utr
+  });
+  io.emit('credit-updated', { customer_name: account.customer_name, balance: newBalance });
+  io.emit('order-updated', { customer_name: account.customer_name });
+
+  res.json({
+    success: true,
+    message: 'Settlement verified and balance updated successfully',
+    settlement_id: settlementId,
+    customer_name: account.customer_name,
+    amount_paid: settlement.amount_paid,
+    new_balance: newBalance,
+    utr: settlement.utr
+  });
+});
+
+// POST /api/credit/settlements/:id/reject - Cashier declines / rejects an invalid UTR settlement (Requires Operator Auth)
+app.post('/api/credit/settlements/:id/reject', requireOperatorAuth, (req, res) => {
+  const settlementId = parseInt(req.params.id);
+  const settlement = db.prepare('SELECT * FROM credit_settlements WHERE id = ?').get(settlementId);
+  if (!settlement) {
+    return res.status(404).json({ error: 'Settlement record not found' });
+  }
+
+  db.prepare("UPDATE credit_settlements SET status = 'REJECTED' WHERE id = ?").run(settlementId);
+
+  io.emit('credit-settlement-rejected', {
+    settlement_id: settlementId,
+    customer_name: settlement.customer_name
+  });
+  io.emit('credit-updated', { customer_name: settlement.customer_name });
+
+  res.json({
+    success: true,
+    message: 'Settlement rejected',
+    settlement_id: settlementId
+  });
 });
 
 // GET /api/credit/backup - Export full credit ledger backup (Requires Operator Auth)

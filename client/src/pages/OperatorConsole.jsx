@@ -4,7 +4,8 @@ import {
   Package, DollarSign, QrCode, RefreshCw, AlertTriangle, 
   Trash2, Plus, Minus, ArrowRight, Settings, Check, X, ShieldAlert,
   Flame, Sparkles, TrendingUp, CreditCard, Edit2, Search,
-  Lock, Unlock, BookOpen, FileText, Users, Printer, Download, Upload
+  Lock, Unlock, BookOpen, FileText, Users, Printer, Download, Upload,
+  Receipt, Calendar, Filter, UserPlus, UserCheck, Phone
 } from 'lucide-react';
 import { playNewOrderSound, playOrderReadySound } from '../utils/audio';
 import socket from '../services/socket';
@@ -61,12 +62,56 @@ export default function OperatorConsole() {
   const [creditStats, setCreditStats] = useState({ total_due: 0, active_debtors: 0, settled_week: 0 });
   const [creditSearch, setCreditSearch] = useState('');
   const [creditViewMode, setCreditViewMode] = useState('table'); // 'table' or 'cards'
+  const [showZeroBalance, setShowZeroBalance] = useState(false); // Hide customers with 0 balance by default
   const [selectedLedger, setSelectedLedger] = useState(null);
   const [ledgerDetail, setLedgerDetail] = useState(null);
   const [loadingLedger, setLoadingLedger] = useState(false);
   const [backupLoading, setBackupLoading] = useState(false);
   const [restoreModal, setRestoreModal] = useState(null);
   const [restoring, setRestoring] = useState(false);
+  const [pendingSettlements, setPendingSettlements] = useState([]);
+  const [verifyingSettlementId, setVerifyingSettlementId] = useState(null);
+
+  // Filter credit accounts: hide 0-balance customers by default unless showZeroBalance is toggled
+  const visibleCreditAccounts = creditAccounts
+    .filter(acc => showZeroBalance || (Number(acc.balance) || 0) > 0)
+    .filter(acc => {
+      const q = creditSearch.toLowerCase().trim();
+      return !q || 
+        (acc.customer_name || '').toLowerCase().includes(q) || 
+        (acc.department || '').toLowerCase().includes(q) || 
+        (acc.desk || '').toLowerCase().includes(q) || 
+        (acc.phone || '').toLowerCase().includes(q);
+    });
+
+  // Helper for today's local date in YYYY-MM-DD
+  const getTodayDateStr = () => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  // Daily Accounting State
+  const [accountingDate, setAccountingDate] = useState(getTodayDateStr);
+  const [accountingData, setAccountingData] = useState(null);
+  const [accountingLoading, setAccountingLoading] = useState(false);
+  const [accountingSearch, setAccountingSearch] = useState('');
+  const [accountingPayFilter, setAccountingPayFilter] = useState('ALL');
+
+  const filteredAccountingOrders = (accountingData?.orders || []).filter(o => {
+    if (accountingPayFilter !== 'ALL' && o.payment_method !== accountingPayFilter) return false;
+    if (accountingSearch) {
+      const q = accountingSearch.toLowerCase().trim();
+      const tokenMatch = String(o.token_no).includes(q) || `#${o.token_no}`.includes(q);
+      const nameMatch = (o.customer_name || '').toLowerCase().includes(q);
+      const deskMatch = (o.customer_desk || '').toLowerCase().includes(q);
+      const itemMatch = (o.items || []).some(i => (i.item_name || '').toLowerCase().includes(q));
+      if (!tokenMatch && !nameMatch && !deskMatch && !itemMatch) return false;
+    }
+    return true;
+  });
 
   // Settlement Modal State
   const [showSettleModal, setShowSettleModal] = useState(null);
@@ -79,6 +124,32 @@ export default function OperatorConsole() {
   const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
   const [newCustomer, setNewCustomer] = useState({ customer_name: '', department: '', phone: '', desk: '', notes: '' });
   const [addingCustomer, setAddingCustomer] = useState(false);
+
+  // Fast-POS Credit Order Customer Select & Quick Add Modal State
+  const [showCreditCustomerModal, setShowCreditCustomerModal] = useState(false);
+  const [creditCustomerSearch, setCreditCustomerSearch] = useState('');
+  const [isAddingNewCreditCustomer, setIsAddingNewCreditCustomer] = useState(false);
+  const [newCreditCustomerForm, setNewCreditCustomerForm] = useState({
+    customer_name: '',
+    department: '',
+    phone: '',
+    notes: '',
+  });
+
+  const matchingCreditCustomers = creditAccounts.filter(acc => {
+    if (!creditCustomerSearch.trim()) return true;
+    const q = creditCustomerSearch.toLowerCase().trim();
+    const cleanPhone = (acc.phone || '').replace(/\D/g, '');
+    const cleanQ = q.replace(/\D/g, '');
+    const phoneMatch = cleanQ.length >= 3 && cleanPhone.includes(cleanQ);
+    return (
+      (acc.customer_name || '').toLowerCase().includes(q) ||
+      (acc.department || '').toLowerCase().includes(q) ||
+      (acc.desk || '').toLowerCase().includes(q) ||
+      (acc.phone || '').toLowerCase().includes(q) ||
+      phoneMatch
+    );
+  });
 
   // QR Standee Modal State
   const [showQrStandeeModal, setShowQrStandeeModal] = useState(false);
@@ -253,14 +324,54 @@ export default function OperatorConsole() {
   // Credit Ledger Actions
   const loadCreditData = async () => {
     try {
-      const [accRes, statsRes] = await Promise.all([
+      const [accRes, statsRes, pendingRes] = await Promise.all([
         fetch('/api/credit/accounts'),
         fetch('/api/credit/stats'),
+        operatorFetch('/api/credit/pending-settlements')
       ]);
       if (accRes.ok) setCreditAccounts(await accRes.json());
       if (statsRes.ok) setCreditStats(await statsRes.json());
+      if (pendingRes.ok) setPendingSettlements(await pendingRes.json());
     } catch (err) {
       console.error('Failed to load credit data:', err);
+    }
+  };
+
+  const handleVerifySettlement = async (settlementId) => {
+    setVerifyingSettlementId(settlementId);
+    try {
+      const res = await operatorFetch(`/api/credit/settlements/${settlementId}/verify`, {
+        method: 'POST'
+      });
+      if (res.ok) {
+        setPendingSettlements(prev => prev.filter(s => s.id !== settlementId));
+        await loadCreditData();
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Failed to verify settlement');
+      }
+    } catch (err) {
+      alert('Error verifying settlement');
+    } finally {
+      setVerifyingSettlementId(null);
+    }
+  };
+
+  const handleRejectSettlement = async (settlementId) => {
+    if (!confirm('Are you sure you want to decline/reject this settlement? The customer will be informed.')) return;
+    try {
+      const res = await operatorFetch(`/api/credit/settlements/${settlementId}/reject`, {
+        method: 'POST'
+      });
+      if (res.ok) {
+        setPendingSettlements(prev => prev.filter(s => s.id !== settlementId));
+        await loadCreditData();
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Failed to reject settlement');
+      }
+    } catch (err) {
+      alert('Error rejecting settlement');
     }
   };
 
@@ -457,6 +568,59 @@ export default function OperatorConsole() {
     }
   };
 
+  // Daily Accounting Fetch & Actions
+  const loadAccountingData = async (targetDate = accountingDate) => {
+    setAccountingLoading(true);
+    try {
+      const res = await fetch(`/api/orders/daily-accounting?date=${targetDate}`);
+      if (res.ok) {
+        const data = await res.json();
+        setAccountingData(data);
+      }
+    } catch (err) {
+      console.error('Failed to load daily accounting:', err);
+    } finally {
+      setAccountingLoading(false);
+    }
+  };
+
+  const handleExportAccountingCsv = () => {
+    if (!accountingData || !accountingData.orders || accountingData.orders.length === 0) {
+      alert('No orders found to export for ' + (accountingData?.date || accountingDate));
+      return;
+    }
+    const headers = ['Token No', 'Time', 'Customer Name', 'Desk / Dept', 'Items (Name x Qty)', 'Total Items', 'Payment Method', 'Payment Status', 'Order Status', 'Total Amount (Rs)'];
+    const rows = accountingData.orders.map(o => {
+      const timeStr = new Date(o.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const itemsStr = (o.items || []).map(i => `${i.quantity}x ${i.item_name}`).join('; ');
+      const totalQty = (o.items || []).reduce((s, i) => s + (i.quantity || 0), 0);
+      return [
+        `"#${o.token_no}"`,
+        `"${timeStr}"`,
+        `"${(o.customer_name || '').replace(/"/g, '""')}"`,
+        `"${(o.customer_desk || '').replace(/"/g, '""')}"`,
+        `"${itemsStr.replace(/"/g, '""')}"`,
+        totalQty,
+        `"${o.payment_method || ''}"`,
+        `"${o.payment_status || ''}"`,
+        `"${o.status || ''}"`,
+        (o.total_amount || 0).toFixed(2)
+      ];
+    });
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `daily_accounting_${accountingData.date || accountingDate}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const handlePrintAccounting = () => {
+    window.print();
+  };
+
   // Load Initial Data
   const loadData = async () => {
     try {
@@ -479,12 +643,19 @@ export default function OperatorConsole() {
       if (settingsRes.ok) setSettings(await settingsRes.json());
       if (creditAccRes.ok) setCreditAccounts(await creditAccRes.json());
       if (creditStatsRes.ok) setCreditStats(await creditStatsRes.json());
+      if (tab === 'accounting') loadAccountingData(accountingDate);
     } catch (err) {
       console.error('Failed to load operator data:', err);
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (tab === 'accounting') {
+      loadAccountingData(accountingDate);
+    }
+  }, [tab, accountingDate]);
 
   useEffect(() => {
     loadData();
@@ -536,11 +707,19 @@ export default function OperatorConsole() {
         .catch(() => {});
     };
 
+    const handleSettlementSubmitted = () => {
+      if (audioEnabled) playNewOrderSound();
+      loadCreditData();
+    };
+
     socket.on('new-order', handleNewOrder);
     socket.on('order-status-changed', handleStatusChanged);
     socket.on('stock-updated', handleStockUpdated);
     socket.on('menu-changed', handleMenuChanged);
     socket.on('credit-updated', loadCreditData);
+    socket.on('credit-settlement-submitted', handleSettlementSubmitted);
+    socket.on('credit-settlement-verified', loadCreditData);
+    socket.on('credit-settlement-rejected', loadCreditData);
 
     return () => {
       socket.off('new-order', handleNewOrder);
@@ -548,6 +727,9 @@ export default function OperatorConsole() {
       socket.off('stock-updated', handleStockUpdated);
       socket.off('menu-changed', handleMenuChanged);
       socket.off('credit-updated', loadCreditData);
+      socket.off('credit-settlement-submitted', handleSettlementSubmitted);
+      socket.off('credit-settlement-verified', loadCreditData);
+      socket.off('credit-settlement-rejected', loadCreditData);
     };
   }, [audioEnabled]);
 
@@ -635,15 +817,16 @@ export default function OperatorConsole() {
   const posTotal = posCart.reduce((sum, i) => sum + (i.price * i.quantity), 0);
 
   // Fast-POS Checkout (Cash, UPI, or Credit)
-  const submitPosOrder = async (payMethod, overrideName) => {
-    if (posCart.length === 0) return;
+  const submitPosOrder = async (payMethod, overrideName, overridePhone, overrideDept) => {
+    if (posCart.length === 0) return false;
     setPosSubmitting(true);
 
     try {
       const finalName = overrideName || posCustomerName.trim() || (payMethod === 'CREDIT' ? 'Credit Staff' : 'Counter Walk-in');
       const payload = {
         customer_name: finalName,
-        customer_desk: 'Counter 1 POS',
+        customer_desk: overrideDept || (payMethod === 'CREDIT' ? 'Staff Tab' : 'Counter 1 POS'),
+        customer_phone: overridePhone || '',
         payment_method: payMethod,
         order_type: 'COUNTER',
         payment_status: payMethod === 'CREDIT' ? 'PENDING' : 'PAID',
@@ -662,13 +845,14 @@ export default function OperatorConsole() {
       if (!res.ok) {
         const err = await res.json();
         alert(err.error || 'Failed to process POS order');
-        return;
+        return false;
       }
 
       const orderData = await res.json();
       setPosLastPlacedToken(orderData.token_no);
       setPosCart([]);
       setPosCustomerName('');
+      setShowCreditCustomerModal(false);
 
       if (payMethod === 'CREDIT') {
         loadCreditData();
@@ -676,11 +860,36 @@ export default function OperatorConsole() {
 
       // Auto clear banner after 4 seconds
       setTimeout(() => setPosLastPlacedToken(null), 4000);
+      return true;
     } catch (err) {
       console.error(err);
       alert('Error placing POS order');
+      return false;
     } finally {
       setPosSubmitting(false);
+    }
+  };
+
+  // Credit Customer Selection Handler
+  const handleSelectCustomerForCredit = async (acc) => {
+    await submitPosOrder('CREDIT', acc.customer_name, acc.phone, acc.department || acc.desk);
+  };
+
+  // Quick Add Customer & Place Credit Order Handler
+  const handleQuickAddAndPlaceCreditOrder = async (e) => {
+    e?.preventDefault?.();
+    const name = (newCreditCustomerForm.customer_name || creditCustomerSearch).trim();
+    if (!name) {
+      alert('Please enter the customer / staff member name.');
+      return;
+    }
+    const phone = (newCreditCustomerForm.phone || '').trim();
+    const dept = (newCreditCustomerForm.department || '').trim();
+
+    const success = await submitPosOrder('CREDIT', name, phone, dept);
+    if (success) {
+      setNewCreditCustomerForm({ customer_name: '', department: '', phone: '', notes: '' });
+      setIsAddingNewCreditCustomer(false);
     }
   };
 
@@ -803,11 +1012,11 @@ export default function OperatorConsole() {
   }
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-slate-100 p-3 sm:p-6 text-slate-900">
+    <div className="min-h-[calc(100vh-4rem)] bg-slate-100 p-3 sm:p-6 text-slate-900 print:bg-white print:p-0">
       <div className="max-w-7xl mx-auto space-y-4">
         
         {/* Top Summary Bar & Quick Stats */}
-        <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80 flex flex-wrap items-center justify-between gap-4">
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80 flex flex-wrap items-center justify-between gap-4 print:hidden">
           {/* Daily Tally */}
           <div className="flex flex-wrap items-center gap-4 sm:gap-6 text-xs sm:text-sm">
             <div>
@@ -882,7 +1091,7 @@ export default function OperatorConsole() {
         </div>
 
         {/* Tab Controls Bar */}
-        <div className="flex items-center justify-between bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
+        <div className="flex items-center justify-between bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm overflow-x-auto print:hidden">
           <div className="flex items-center space-x-1.5 min-w-max">
             <button
               onClick={() => setTab('queue')}
@@ -935,11 +1144,27 @@ export default function OperatorConsole() {
             >
               <BookOpen className="w-4 h-4" />
               <span>Weekly Credit</span>
-              {creditStats.total_due > 0 && (
+              {pendingSettlements.length > 0 ? (
+                <span className="px-1.5 py-0.5 rounded-full text-[10px] font-black bg-amber-400 text-slate-900 animate-pulse border border-amber-300">
+                  {pendingSettlements.length} To Verify
+                </span>
+              ) : creditStats.total_due > 0 ? (
                 <span className="px-1.5 py-0.5 rounded-full text-[10px] font-black bg-rose-500 text-white">
                   ₹{creditStats.total_due}
                 </span>
-              )}
+              ) : null}
+            </button>
+
+            <button
+              onClick={() => setTab('accounting')}
+              className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center space-x-2 transition-all ${
+                tab === 'accounting'
+                  ? 'bg-emerald-600 text-white shadow-md'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <Receipt className="w-4 h-4" />
+              <span>Daily Accounting</span>
             </button>
 
             <button
@@ -1544,13 +1769,17 @@ export default function OperatorConsole() {
                   <button
                     disabled={posCart.length === 0 || posSubmitting}
                     onClick={() => {
-                      if (!posCustomerName.trim()) {
-                        const name = prompt('Enter Staff Member Name for Weekly Credit:');
-                        if (!name || !name.trim()) return;
-                        submitPosOrder('CREDIT', name.trim());
-                      } else {
-                        submitPosOrder('CREDIT', posCustomerName.trim());
-                      }
+                      const initialSearch = posCustomerName.trim();
+                      setCreditCustomerSearch(initialSearch);
+                      const isDigits = initialSearch && /^\d+$/.test(initialSearch);
+                      setNewCreditCustomerForm({
+                        customer_name: isDigits ? '' : initialSearch,
+                        phone: isDigits ? initialSearch : '',
+                        department: '',
+                        notes: ''
+                      });
+                      setIsAddingNewCreditCustomer(false);
+                      setShowCreditCustomerModal(true);
                     }}
                     className="py-3 px-2 rounded-2xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 disabled:opacity-50 text-white font-black text-xs shadow-md shadow-indigo-600/20 transition-all flex flex-col items-center justify-center"
                   >
@@ -1714,6 +1943,102 @@ export default function OperatorConsole() {
         {/* ================= VIEW 4: WEEKLY CREDIT LEDGER ================= */}
         {tab === 'credit' && (
           <div className="space-y-6 animate-fade-in">
+            {/* PENDING UPI SETTLEMENTS VERIFICATION BANNER */}
+            {pendingSettlements.length > 0 && (
+              <div className="bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 rounded-3xl p-5 sm:p-6 border-2 border-amber-300 shadow-sm space-y-4 animate-fade-in">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold shadow-sm">
+                      <CreditCard className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="font-extrabold text-sm sm:text-base text-slate-900 flex items-center gap-2">
+                        <span>Pending UPI Settlements Awaiting Confirmation</span>
+                        <span className="px-2 py-0.5 rounded-full text-xs font-black bg-amber-400 text-slate-900 animate-pulse">
+                          {pendingSettlements.length} New
+                        </span>
+                      </h3>
+                      <p className="text-xs text-slate-600">
+                        Customers have submitted payments with UTR. Verify in your bank/UPI app and click "Received / Verify".
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                  {pendingSettlements.map((setl) => (
+                    <div
+                      key={setl.id}
+                      className="bg-white rounded-2xl p-4 border border-amber-200 shadow-sm flex flex-col justify-between gap-3"
+                    >
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="font-extrabold text-sm text-slate-900">
+                            {setl.customer_name}
+                          </span>
+                          <span className="font-mono-code font-black text-base text-emerald-600">
+                            ₹{setl.amount_paid}
+                          </span>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                          {setl.department && (
+                            <span className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-semibold border border-indigo-100">
+                              🏢 {setl.department}
+                            </span>
+                          )}
+                          {setl.phone && <span>📞 {setl.phone}</span>}
+                          <span>• Current Balance: ₹{setl.current_balance}</span>
+                        </div>
+
+                        {setl.utr && (
+                          <div className="bg-slate-50 p-2 rounded-xl border border-slate-200 flex items-center justify-between text-xs">
+                            <span className="text-slate-500 font-semibold">12-Digit UTR:</span>
+                            <span className="font-mono font-bold text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200">
+                              {setl.utr}
+                            </span>
+                          </div>
+                        )}
+
+                        <p className="text-[11px] text-slate-400 flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          <span>Submitted: {new Date(setl.settled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        </p>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+                        <button
+                          onClick={() => handleRejectSettlement(setl.id)}
+                          className="py-2 px-3 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-700 text-xs font-bold transition-all border border-slate-200"
+                        >
+                          ✕ Reject
+                        </button>
+
+                        <button
+                          disabled={verifyingSettlementId === setl.id}
+                          onClick={() => handleVerifySettlement(setl.id)}
+                          className="py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-extrabold shadow-sm transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                        >
+                          {verifyingSettlementId === setl.id ? (
+                            <>
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                              <span>Verifying...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Check className="w-3.5 h-3.5" />
+                              <span>Received / Verify</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Top Metric Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
               <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
@@ -1850,215 +2175,231 @@ export default function OperatorConsole() {
                   )}
                 </div>
 
-                <div className="flex items-center gap-1 self-end sm:self-auto bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-bold">
-                  <button
-                    onClick={() => setCreditViewMode('table')}
-                    className={`px-3 py-1 rounded-lg transition-all ${
-                      creditViewMode === 'table'
-                        ? 'bg-white text-indigo-700 shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    Table View
-                  </button>
-                  <button
-                    onClick={() => setCreditViewMode('cards')}
-                    className={`px-3 py-1 rounded-lg transition-all ${
-                      creditViewMode === 'cards'
-                        ? 'bg-white text-indigo-700 shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    Cards View
-                  </button>
+                <div className="flex flex-wrap items-center gap-2 self-end sm:self-auto">
+                  <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 cursor-pointer select-none bg-slate-100 hover:bg-slate-200/70 px-2.5 py-1.5 rounded-xl border border-slate-200 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={showZeroBalance}
+                      onChange={(e) => setShowZeroBalance(e.target.checked)}
+                      className="rounded text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5"
+                    />
+                    <span>Show ₹0 Cleared</span>
+                  </label>
+
+                  <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-bold">
+                    <button
+                      onClick={() => setCreditViewMode('table')}
+                      className={`px-3 py-1 rounded-lg transition-all ${
+                        creditViewMode === 'table'
+                          ? 'bg-white text-indigo-700 shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Table View
+                    </button>
+                    <button
+                      onClick={() => setCreditViewMode('cards')}
+                      className={`px-3 py-1 rounded-lg transition-all ${
+                        creditViewMode === 'cards'
+                          ? 'bg-white text-indigo-700 shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Cards View
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              {/* Customer Table View (Primary Requirement 1) */}
-              {creditViewMode === 'table' && (
-                <div className="overflow-x-auto border border-slate-200 rounded-2xl">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[11px]">
-                      <tr>
-                        <th className="py-3 px-4">1. Customer / Staff Name</th>
-                        <th className="py-3 px-4">2. Department</th>
-                        <th className="py-3 px-4">3. Phone Number</th>
-                        <th className="py-3 px-4 text-right">4. Due Amount</th>
-                        <th className="py-3 px-4 text-center">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 font-medium">
-                      {creditAccounts
-                        .filter(acc => {
-                          const q = creditSearch.toLowerCase().trim();
-                          return !q || 
-                            (acc.customer_name || '').toLowerCase().includes(q) || 
-                            (acc.department || '').toLowerCase().includes(q) || 
-                            (acc.desk || '').toLowerCase().includes(q) || 
-                            (acc.phone || '').toLowerCase().includes(q);
-                        })
-                        .map(acc => {
-                          const hasDues = (acc.balance || 0) > 0;
-                          return (
-                            <tr key={acc.id} className="hover:bg-slate-50/80 transition-colors">
-                              <td className="py-3 px-4">
-                                <button
-                                  onClick={() => viewCustomerLedger(acc.customer_name)}
-                                  className="text-left font-bold text-sm text-indigo-700 hover:text-indigo-900 hover:underline flex items-center gap-1.5"
-                                  title="Click to view detailed itemized bill & statement"
-                                >
-                                  <span>{acc.customer_name}</span>
-                                  <FileText className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                </button>
-                                {acc.notes && (
-                                  <p className="text-[10px] text-slate-400 italic truncate max-w-xs">{acc.notes}</p>
-                                )}
-                              </td>
-                              <td className="py-3 px-4">
-                                <span className="inline-block px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 font-semibold border border-indigo-100/80">
-                                  {acc.department || acc.desk || 'General Staff'}
-                                </span>
-                              </td>
-                              <td className="py-3 px-4">
-                                {acc.phone ? (
-                                  <a href={`tel:${acc.phone}`} className="text-slate-700 hover:text-indigo-600 font-mono">
-                                    📞 {acc.phone}
-                                  </a>
-                                ) : (
-                                  <span className="text-slate-400 italic">—</span>
-                                )}
-                              </td>
-                              <td className="py-3 px-4 text-right">
-                                <span className={`text-base font-black ${hasDues ? 'text-rose-600' : 'text-emerald-600'}`}>
-                                  ₹{acc.balance}
-                                </span>
-                                <span className={`block text-[10px] font-bold uppercase tracking-wider ${hasDues ? 'text-rose-500' : 'text-emerald-600'}`}>
-                                  {hasDues ? `${acc.unpaid_orders_count || 0} unpaid` : 'Cleared'}
-                                </span>
-                              </td>
-                              <td className="py-3 px-4">
-                                <div className="flex items-center justify-center gap-1.5">
+              {/* Customer Table or Cards View */}
+              {visibleCreditAccounts.length > 0 ? (
+                <>
+                  {/* Customer Table View (Primary Requirement 1) */}
+                  {creditViewMode === 'table' && (
+                    <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[11px]">
+                          <tr>
+                            <th className="py-3 px-4">1. Customer / Staff Name</th>
+                            <th className="py-3 px-4">2. Department</th>
+                            <th className="py-3 px-4">3. Phone Number</th>
+                            <th className="py-3 px-4 text-right">4. Due Amount</th>
+                            <th className="py-3 px-4 text-center">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 font-medium">
+                          {visibleCreditAccounts.map(acc => {
+                            const hasDues = (acc.balance || 0) > 0;
+                            return (
+                              <tr key={acc.id} className="hover:bg-slate-50/80 transition-colors">
+                                <td className="py-3 px-4">
                                   <button
                                     onClick={() => viewCustomerLedger(acc.customer_name)}
-                                    className="py-1.5 px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all flex items-center gap-1"
-                                    title="View detailed orders, items, and statement"
+                                    className="text-left font-bold text-sm text-indigo-700 hover:text-indigo-900 hover:underline flex items-center gap-1.5"
+                                    title="Click to view detailed itemized bill & statement"
                                   >
-                                    <FileText className="w-3.5 h-3.5 text-indigo-600" />
-                                    <span>Statement</span>
+                                    <span>{acc.customer_name}</span>
+                                    <FileText className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                                   </button>
-                                  <button
-                                    disabled={!hasDues}
-                                    onClick={() => {
-                                      setShowSettleModal(acc);
-                                      setSettleAmount(String(acc.balance));
-                                    }}
-                                    className="py-1.5 px-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 disabled:opacity-30 disabled:pointer-events-none text-white text-xs font-bold shadow-xs transition-all flex items-center gap-1"
-                                    title="Record payment to settle balance"
-                                  >
-                                    <CheckCircle className="w-3.5 h-3.5" />
-                                    <span>Settle</span>
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                                  {acc.notes && (
+                                    <p className="text-[10px] text-slate-400 italic truncate max-w-xs">{acc.notes}</p>
+                                  )}
+                                </td>
+                                <td className="py-3 px-4">
+                                  <span className="inline-block px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 font-semibold border border-indigo-100/80">
+                                    {acc.department || acc.desk || 'General Staff'}
+                                  </span>
+                                </td>
+                                <td className="py-3 px-4">
+                                  {acc.phone ? (
+                                    <a href={`tel:${acc.phone}`} className="text-slate-700 hover:text-indigo-600 font-mono">
+                                      📞 {acc.phone}
+                                    </a>
+                                  ) : (
+                                    <span className="text-slate-400 italic">—</span>
+                                  )}
+                                </td>
+                                <td className="py-3 px-4 text-right">
+                                  <span className={`text-base font-black ${hasDues ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                    ₹{acc.balance}
+                                  </span>
+                                  <span className={`block text-[10px] font-bold uppercase tracking-wider ${hasDues ? 'text-rose-500' : 'text-emerald-600'}`}>
+                                    {hasDues ? `${acc.unpaid_orders_count || 0} unpaid` : 'Cleared'}
+                                  </span>
+                                </td>
+                                <td className="py-3 px-4">
+                                  <div className="flex items-center justify-center gap-1.5">
+                                    <button
+                                      onClick={() => viewCustomerLedger(acc.customer_name)}
+                                      className="py-1.5 px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all flex items-center gap-1"
+                                      title="View detailed orders, items, and statement"
+                                    >
+                                      <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                                      <span>Statement</span>
+                                    </button>
+                                    <button
+                                      disabled={!hasDues}
+                                      onClick={() => {
+                                        setShowSettleModal(acc);
+                                        setSettleAmount(String(acc.balance));
+                                      }}
+                                      className="py-1.5 px-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 disabled:opacity-30 disabled:pointer-events-none text-white text-xs font-bold shadow-xs transition-all flex items-center gap-1"
+                                      title="Record payment to settle balance"
+                                    >
+                                      <CheckCircle className="w-3.5 h-3.5" />
+                                      <span>Settle</span>
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
 
-              {/* Customer Cards Grid View */}
-              {creditViewMode === 'cards' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pt-2">
-                  {creditAccounts
-                    .filter(acc => {
-                      const q = creditSearch.toLowerCase().trim();
-                      return !q || 
-                        (acc.customer_name || '').toLowerCase().includes(q) || 
-                        (acc.department || '').toLowerCase().includes(q) || 
-                        (acc.desk || '').toLowerCase().includes(q) || 
-                        (acc.phone || '').toLowerCase().includes(q);
-                    })
-                    .map(acc => {
-                      const hasDues = (acc.balance || 0) > 0;
-                      return (
-                        <div
-                          key={acc.id}
-                          className={`p-4 rounded-2xl border transition-all flex flex-col justify-between space-y-3 ${
-                            hasDues 
-                              ? 'bg-white border-slate-200 hover:border-indigo-300 shadow-sm' 
-                              : 'bg-slate-50/60 border-slate-200 opacity-80'
-                          }`}
-                        >
-                          <div className="flex items-start justify-between">
-                            <div>
-                              <button
-                                onClick={() => viewCustomerLedger(acc.customer_name)}
-                                className="font-extrabold text-slate-900 text-base text-left hover:text-indigo-600 hover:underline flex items-center gap-1"
-                              >
-                                <span>{acc.customer_name}</span>
-                                <FileText className="w-3.5 h-3.5 text-slate-400 inline" />
-                              </button>
-                              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 mt-1">
-                                <span className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-semibold border border-indigo-100">
-                                  🏢 {acc.department || acc.desk || 'General'}
+                  {/* Customer Cards Grid View */}
+                  {creditViewMode === 'cards' && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pt-2">
+                      {visibleCreditAccounts.map(acc => {
+                        const hasDues = (acc.balance || 0) > 0;
+                        return (
+                          <div
+                            key={acc.id}
+                            className={`p-4 rounded-2xl border transition-all flex flex-col justify-between space-y-3 ${
+                              hasDues 
+                                ? 'bg-white border-slate-200 hover:border-indigo-300 shadow-sm' 
+                                : 'bg-slate-50/60 border-slate-200 opacity-80'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between">
+                              <div>
+                                <button
+                                  onClick={() => viewCustomerLedger(acc.customer_name)}
+                                  className="font-extrabold text-slate-900 text-base text-left hover:text-indigo-600 hover:underline flex items-center gap-1"
+                                >
+                                  <span>{acc.customer_name}</span>
+                                  <FileText className="w-3.5 h-3.5 text-slate-400 inline" />
+                                </button>
+                                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 mt-1">
+                                  <span className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-semibold border border-indigo-100">
+                                    🏢 {acc.department || acc.desk || 'General'}
+                                  </span>
+                                  {acc.phone && <span className="text-slate-400">📞 {acc.phone}</span>}
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <span className={`text-xl font-black block ${hasDues ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                  ₹{acc.balance}
                                 </span>
-                                {acc.phone && <span className="text-slate-400">📞 {acc.phone}</span>}
+                                <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                                  hasDues ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'
+                                }`}>
+                                  {hasDues ? `${acc.unpaid_orders_count || 0} Unpaid Orders` : 'All Cleared'}
+                                </span>
                               </div>
                             </div>
-                            <div className="text-right">
-                              <span className={`text-xl font-black block ${hasDues ? 'text-rose-600' : 'text-emerald-600'}`}>
-                                ₹{acc.balance}
-                              </span>
-                              <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                                hasDues ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'
-                              }`}>
-                                {hasDues ? `${acc.unpaid_orders_count || 0} Unpaid Orders` : 'All Cleared'}
-                              </span>
+
+                            {acc.notes && (
+                              <p className="text-xs text-slate-500 bg-slate-50 p-2 rounded-xl border border-slate-100 italic">
+                                "{acc.notes}"
+                              </p>
+                            )}
+
+                            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+                              <button
+                                onClick={() => viewCustomerLedger(acc.customer_name)}
+                                className="py-2 px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+                              >
+                                <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                                <span>View Bill</span>
+                              </button>
+
+                              <button
+                                disabled={!hasDues}
+                                onClick={() => {
+                                  setShowSettleModal(acc);
+                                  setSettleAmount(String(acc.balance));
+                                }}
+                                className="py-2 px-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 disabled:opacity-40 disabled:pointer-events-none text-white text-xs font-bold shadow-sm transition-all flex items-center justify-center gap-1.5"
+                              >
+                                <CheckCircle className="w-3.5 h-3.5" />
+                                <span>Settle Bill</span>
+                              </button>
                             </div>
                           </div>
-
-                          {acc.notes && (
-                            <p className="text-xs text-slate-500 bg-slate-50 p-2 rounded-xl border border-slate-100 italic">
-                              "{acc.notes}"
-                            </p>
-                          )}
-
-                          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
-                            <button
-                              onClick={() => viewCustomerLedger(acc.customer_name)}
-                              className="py-2 px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all flex items-center justify-center gap-1.5"
-                            >
-                              <FileText className="w-3.5 h-3.5 text-indigo-600" />
-                              <span>View Bill</span>
-                            </button>
-
-                            <button
-                              disabled={!hasDues}
-                              onClick={() => {
-                                setShowSettleModal(acc);
-                                setSettleAmount(String(acc.balance));
-                              }}
-                              className="py-2 px-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 disabled:opacity-40 disabled:pointer-events-none text-white text-xs font-bold shadow-sm transition-all flex items-center justify-center gap-1.5"
-                            >
-                              <CheckCircle className="w-3.5 h-3.5" />
-                              <span>Settle Bill</span>
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                </div>
-              )}
-
-              {creditAccounts.length === 0 && (
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              ) : creditAccounts.length === 0 ? (
                 <div className="text-center py-12 text-slate-400 space-y-2">
                   <BookOpen className="w-10 h-10 mx-auto text-slate-300" />
                   <p className="text-sm font-semibold text-slate-600">No Credit Accounts Registered Yet</p>
                   <p className="text-xs text-slate-400 max-w-sm mx-auto">
                     Click "Register Staff Member" or bill an order via "Fast-POS ➔ CREDIT" to start an employee's weekly tab.
                   </p>
+                </div>
+              ) : (
+                <div className="text-center py-12 text-slate-400 space-y-3 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                  <CheckCircle className="w-10 h-10 mx-auto text-emerald-500" />
+                  <p className="text-sm font-bold text-slate-700">No Customers With Active Dues</p>
+                  <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                    {creditSearch 
+                      ? `No accounts with pending balance match "${creditSearch}".`
+                      : 'All registered staff accounts currently have ₹0 balance (all dues cleared).'
+                    }
+                  </p>
+                  {!showZeroBalance && (
+                    <button
+                      onClick={() => setShowZeroBalance(true)}
+                      className="px-3.5 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold transition-all inline-flex items-center gap-1.5 shadow-xs"
+                    >
+                      <span>Show ₹0 Cleared Accounts</span>
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -2210,6 +2551,368 @@ export default function OperatorConsole() {
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ================= VIEW 6: DAILY ACCOUNTING ================= */}
+        {tab === 'accounting' && (
+          <div className="space-y-5 print:space-y-4">
+            
+            {/* Control Bar: Date Selector, Quick Today/Yesterday, Export CSV, Print Sheet */}
+            <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 print:border-none print:p-2 print:shadow-none">
+              <div>
+                <div className="flex items-center space-x-2">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                    <Receipt className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-black text-slate-900">
+                      Daily Accounting & Order Reconciliation
+                    </h2>
+                    <p className="text-xs text-slate-500">
+                      View all tokens, itemized quantities, and revenue tallies for end-of-day accounts.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Date Controls & Action Buttons */}
+              <div className="flex flex-wrap items-center gap-2 print:hidden">
+                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                  <button
+                    onClick={() => {
+                      const today = getTodayDateStr();
+                      setAccountingDate(today);
+                      loadAccountingData(today);
+                    }}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                      accountingDate === getTodayDateStr()
+                        ? 'bg-white text-emerald-700 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Today
+                  </button>
+                  <button
+                    onClick={() => {
+                      const d = new Date();
+                      d.setDate(d.getDate() - 1);
+                      const yest = d.toISOString().slice(0, 10);
+                      setAccountingDate(yest);
+                      loadAccountingData(yest);
+                    }}
+                    className="px-3 py-1 rounded-lg text-xs font-bold text-slate-600 hover:text-slate-900 transition-all"
+                  >
+                    Yesterday
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-1.5 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">
+                  <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                  <input
+                    type="date"
+                    value={accountingDate}
+                    onChange={(e) => {
+                      setAccountingDate(e.target.value);
+                      loadAccountingData(e.target.value);
+                    }}
+                    className="bg-transparent text-xs font-bold text-slate-700 focus:outline-none"
+                  />
+                </div>
+
+                <button
+                  onClick={handleExportAccountingCsv}
+                  className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 font-bold text-xs flex items-center gap-1.5 transition-all border border-slate-200"
+                  title="Export orders to CSV file for Excel"
+                >
+                  <Download className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Export CSV</span>
+                </button>
+
+                <button
+                  onClick={handlePrintAccounting}
+                  className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-emerald-600/20"
+                  title="Print clean Daily Accounting report"
+                >
+                  <Printer className="w-3.5 h-3.5 text-white" />
+                  <span>Print Sheet</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Print Header (Only visible on paper print) */}
+            <div className="hidden print:block border-b-2 border-slate-800 pb-3 mb-4">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h1 className="text-2xl font-black">{settings.canteen_name || 'BMU Canteen'}</h1>
+                  <p className="text-xs text-slate-600">Daily Accounting & Token Reconciliation Report</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-bold">Date: {accountingData?.date || accountingDate}</p>
+                  <p className="text-[10px] text-slate-500">Printed: {new Date().toLocaleString()}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Daily Financial Summary Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+              <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm print:border print:p-3">
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                  Total Day Sales
+                </span>
+                <span className="text-xl sm:text-2xl font-black text-slate-900 block mt-0.5">
+                  ₹{accountingData?.summary?.total_sales || 0}
+                </span>
+                <span className="text-[10px] text-slate-400 block mt-0.5">
+                  {accountingData?.summary?.valid_orders || 0} Valid Orders
+                </span>
+              </div>
+
+              <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm print:border print:p-3">
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                  💵 Cash Sales
+                </span>
+                <span className="text-xl sm:text-2xl font-black text-emerald-600 block mt-0.5">
+                  ₹{accountingData?.summary?.cash_sales || 0}
+                </span>
+                <span className="text-[10px] text-emerald-600/70 block mt-0.5 font-semibold">
+                  Direct Cash Tally
+                </span>
+              </div>
+
+              <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm print:border print:p-3">
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                  ⚡ UPI Sales
+                </span>
+                <span className="text-xl sm:text-2xl font-black text-orange-600 block mt-0.5">
+                  ₹{accountingData?.summary?.upi_sales || 0}
+                </span>
+                <span className="text-[10px] text-orange-600/70 block mt-0.5 font-semibold">
+                  Direct Bank Transfers
+                </span>
+              </div>
+
+              <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm print:border print:p-3">
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                  📋 Credit Tab
+                </span>
+                <span className="text-xl sm:text-2xl font-black text-indigo-600 block mt-0.5">
+                  ₹{accountingData?.summary?.credit_sales || 0}
+                </span>
+                <span className="text-[10px] text-indigo-600/70 block mt-0.5 font-semibold">
+                  Staff Weekly Tab
+                </span>
+              </div>
+
+              <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm print:border print:p-3 col-span-2 sm:col-span-1">
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                  🍽️ Items Sold
+                </span>
+                <span className="text-xl sm:text-2xl font-black text-slate-800 block mt-0.5">
+                  {accountingData?.summary?.total_items_sold || 0}
+                </span>
+                <span className="text-[10px] text-slate-400 block mt-0.5">
+                  {accountingData?.summary?.cancelled_orders || 0} Cancelled
+                </span>
+              </div>
+            </div>
+
+            {/* Section: Item-Wise Sales & Quantity Tally */}
+            <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm space-y-3 print:border print:shadow-none">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-black text-sm text-slate-900 flex items-center gap-1.5">
+                    <Package className="w-4 h-4 text-emerald-600" />
+                    <span>Daily Item Quantity Sold Tally (Stock & Consumption)</span>
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Aggregated total units prepared and sold for each menu item today.
+                  </p>
+                </div>
+                <span className="text-xs font-bold text-slate-500">
+                  {accountingData?.item_sales?.length || 0} Distinct Items
+                </span>
+              </div>
+
+              {accountingLoading ? (
+                <div className="text-center py-6 text-slate-400 text-xs">Loading items tally...</div>
+              ) : (!accountingData?.item_sales || accountingData.item_sales.length === 0) ? (
+                <p className="text-xs text-slate-400 italic py-3 text-center">
+                  No items sold on {accountingData?.date || accountingDate}.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[10px]">
+                      <tr>
+                        <th className="py-2.5 px-3">Item Name</th>
+                        <th className="py-2.5 px-3 text-center">Unit Price</th>
+                        <th className="py-2.5 px-3 text-center font-black text-emerald-700">Total Qty Sold</th>
+                        <th className="py-2.5 px-3 text-right">Total Revenue</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-medium">
+                      {accountingData.item_sales.map((item, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50/70">
+                          <td className="py-2.5 px-3 font-bold text-slate-800">
+                            {item.item_name}
+                          </td>
+                          <td className="py-2.5 px-3 text-center text-slate-600 font-mono">
+                            ₹{item.unit_price}
+                          </td>
+                          <td className="py-2.5 px-3 text-center">
+                            <span className="inline-block px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-black text-xs">
+                              {item.total_quantity}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-black text-slate-900 font-mono">
+                            ₹{item.total_revenue}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Section: Token-by-Token Itemized Orders Ledger */}
+            <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm space-y-4 print:border print:shadow-none">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-black text-sm text-slate-900 flex items-center gap-1.5">
+                    <FileText className="w-4 h-4 text-indigo-600" />
+                    <span>Itemized Orders Ledger (Token #, Items & Quantities)</span>
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Individual order details for auditing and token verification.
+                  </p>
+                </div>
+
+                {/* Filter & Search Bar */}
+                <div className="flex flex-wrap items-center gap-2 print:hidden">
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Search Token, Customer, or Item..."
+                      value={accountingSearch}
+                      onChange={(e) => setAccountingSearch(e.target.value)}
+                      className="pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-slate-50"
+                    />
+                  </div>
+
+                  <select
+                    value={accountingPayFilter}
+                    onChange={(e) => setAccountingPayFilter(e.target.value)}
+                    className="px-2.5 py-1.5 rounded-xl border border-slate-200 text-xs font-semibold bg-slate-50 text-slate-700 focus:outline-none"
+                  >
+                    <option value="ALL">All Payments</option>
+                    <option value="CASH">💵 Cash</option>
+                    <option value="UPI">⚡ UPI</option>
+                    <option value="CREDIT">📋 Credit</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Table */}
+              {accountingLoading ? (
+                <div className="text-center py-10 text-slate-400 text-xs">Loading daily orders...</div>
+              ) : (!filteredAccountingOrders || filteredAccountingOrders.length === 0) ? (
+                <div className="text-center py-10 text-slate-400 space-y-1">
+                  <Receipt className="w-8 h-8 mx-auto text-slate-300" />
+                  <p className="text-xs font-bold text-slate-600">No Orders Found</p>
+                  <p className="text-[11px] text-slate-400">
+                    {accountingSearch ? `No orders matched "${accountingSearch}"` : `No orders placed on ${accountingData?.date || accountingDate}.`}
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto border border-slate-200 rounded-2xl print:border-slate-300">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[10px] print:bg-slate-100">
+                      <tr>
+                        <th className="py-2.5 px-3 font-black text-slate-800">Token #</th>
+                        <th className="py-2.5 px-3">Time</th>
+                        <th className="py-2.5 px-3">Customer & Location</th>
+                        <th className="py-2.5 px-3">Items & Quantities</th>
+                        <th className="py-2.5 px-3 text-center">Payment</th>
+                        <th className="py-2.5 px-3 text-right">Order Amount</th>
+                        <th className="py-2.5 px-3 text-center print:hidden">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-medium">
+                      {filteredAccountingOrders.map(o => {
+                        const timeStr = new Date(o.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                        const isCancelled = o.status === 'CANCELLED';
+                        return (
+                          <tr key={o.id} className={`hover:bg-slate-50/70 transition-colors ${isCancelled ? 'bg-rose-50/40 opacity-70' : ''}`}>
+                            <td className="py-2.5 px-3 font-mono">
+                              <span className={`inline-block px-2.5 py-1 rounded-xl font-black text-xs ${
+                                isCancelled ? 'bg-slate-200 text-slate-600 line-through' : 'bg-slate-900 text-white shadow-xs'
+                              }`}>
+                                #{o.token_no}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-slate-500 font-mono text-[11px]">
+                              {timeStr}
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <span className="font-bold text-slate-900 block text-xs">{o.customer_name}</span>
+                              <span className="text-[10px] text-slate-400 block truncate max-w-[150px]">
+                                {o.customer_desk || 'Counter POS'}
+                                {o.customer_phone ? ` • ${o.customer_phone}` : ''}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <div className="space-y-0.5">
+                                {(o.items || []).map((item, i) => (
+                                  <div key={i} className="flex items-center gap-1.5 text-xs">
+                                    <span className="font-black px-1.5 py-0.2 rounded bg-slate-100 text-slate-800 text-[10px]">
+                                      {item.quantity}x
+                                    </span>
+                                    <span className="font-medium text-slate-800">{item.item_name}</span>
+                                    <span className="text-[10px] text-slate-400 font-mono">
+                                      (₹{item.total_price || (item.price * item.quantity)})
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-3 text-center">
+                              <span className={`inline-block px-2 py-0.5 rounded-md font-bold text-[10px] border ${
+                                o.payment_method === 'CASH'
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                  : o.payment_method === 'UPI'
+                                  ? 'bg-orange-50 text-orange-700 border-orange-200'
+                                  : 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                              }`}>
+                                {o.payment_method} • {o.payment_status}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-mono font-black text-sm">
+                              <span className={isCancelled ? 'line-through text-slate-400' : 'text-slate-900'}>
+                                ₹{o.total_amount}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-center print:hidden">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                                o.status === 'COMPLETED'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : o.status === 'CANCELLED'
+                                  ? 'bg-rose-100 text-rose-800'
+                                  : 'bg-amber-100 text-amber-800'
+                              }`}>
+                                {o.status}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -3181,6 +3884,253 @@ export default function OperatorConsole() {
                     <span>Print Standee</span>
                   </button>
                 </div>
+              </div>
+
+            </div>
+          </div>
+        )}
+
+        {/* Fast-POS Credit Order Customer Select & Quick-Add Modal */}
+        {showCreditCustomerModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+            <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden border border-slate-100 max-h-[90vh] flex flex-col">
+              
+              {/* Header */}
+              <div className="bg-gradient-to-r from-indigo-900 via-indigo-800 to-slate-900 px-6 py-4 text-white flex items-center justify-between shrink-0">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 rounded-2xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-300">
+                    <BookOpen className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-base tracking-tight">Select Credit Customer</h3>
+                    <p className="text-xs text-indigo-200">
+                      Charge Bill Amount <span className="font-black text-white">₹{posTotal}</span> to staff weekly tab
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowCreditCustomerModal(false)}
+                  className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="p-6 space-y-4 overflow-y-auto flex-1">
+                
+                {/* Search Box */}
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Search Customer (Name or Mobile)
+                  </label>
+                  <div className="relative">
+                    <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      autoFocus
+                      placeholder="Type staff name or 10-digit mobile number..."
+                      value={creditCustomerSearch}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setCreditCustomerSearch(val);
+                        // Pre-populate new customer form in case they switch to adding
+                        setNewCreditCustomerForm(prev => ({
+                          ...prev,
+                          customer_name: isNaN(val.trim()) ? val.trim() : prev.customer_name,
+                          phone: !isNaN(val.trim()) ? val.trim() : prev.phone,
+                        }));
+                      }}
+                      className="w-full pl-10 pr-10 py-2.5 rounded-2xl border border-slate-200 text-sm font-semibold focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-slate-50/50"
+                    />
+                    {creditCustomerSearch && (
+                      <button
+                        onClick={() => setCreditCustomerSearch('')}
+                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Switch view: Search Results or Add Form */}
+                {!isAddingNewCreditCustomer ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between text-xs text-slate-500">
+                      <span>Matching Customers ({matchingCreditCustomers.length})</span>
+                      <button
+                        type="button"
+                        onClick={() => setIsAddingNewCreditCustomer(true)}
+                        className="font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 hover:underline"
+                      >
+                        <UserPlus className="w-3.5 h-3.5" />
+                        <span>+ Add New Customer</span>
+                      </button>
+                    </div>
+
+                    {matchingCreditCustomers.length === 0 ? (
+                      <div className="p-5 rounded-2xl bg-amber-50 border border-amber-200 text-center space-y-3">
+                        <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center mx-auto">
+                          <Users className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-amber-900">
+                            No Customer Found matching "{creditCustomerSearch}"
+                          </p>
+                          <p className="text-[11px] text-amber-700 mt-0.5">
+                            Would you like to register this customer now and place the credit order?
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setIsAddingNewCreditCustomer(true)}
+                          className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-bold shadow-sm transition-all flex items-center justify-center gap-1.5 mx-auto"
+                        >
+                          <UserPlus className="w-4 h-4" />
+                          <span>Register & Place Credit Order</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                        {matchingCreditCustomers.map(acc => (
+                          <div
+                            key={acc.id}
+                            className="p-3.5 rounded-2xl border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/40 transition-all flex items-center justify-between gap-3 shadow-xs bg-white"
+                          >
+                            <div className="min-w-0">
+                              <h4 className="font-extrabold text-sm text-slate-900 flex items-center gap-1.5 truncate">
+                                <span>{acc.customer_name}</span>
+                              </h4>
+                              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 mt-1">
+                                <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-semibold text-[11px]">
+                                  🏢 {acc.department || acc.desk || 'General Staff'}
+                                </span>
+                                {acc.phone && (
+                                  <span className="font-mono text-[11px] text-slate-600 flex items-center gap-0.5">
+                                    <Phone className="w-3 h-3 text-slate-400" />
+                                    <span>{acc.phone}</span>
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[11px] font-bold mt-1 text-slate-500">
+                                Current Tab: <span className={acc.balance > 0 ? 'text-rose-600' : 'text-emerald-600 font-semibold'}>₹{acc.balance} {acc.balance > 0 ? 'due' : 'cleared'}</span>
+                              </p>
+                            </div>
+
+                            <button
+                              type="button"
+                              disabled={posSubmitting}
+                              onClick={() => handleSelectCustomerForCredit(acc)}
+                              className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 disabled:opacity-50 text-white font-bold text-xs shadow-sm transition-all shrink-0 flex items-center gap-1"
+                            >
+                              <UserCheck className="w-4 h-4" />
+                              <span>Select & Bill ₹{posTotal}</span>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  /* Quick Add Customer Form */
+                  <form onSubmit={handleQuickAddAndPlaceCreditOrder} className="space-y-3 bg-slate-50/80 p-4 rounded-2xl border border-slate-200 animate-fade-in">
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                      <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                        <UserPlus className="w-4 h-4 text-indigo-600" />
+                        <span>Register New Staff & Bill Credit</span>
+                      </span>
+                      {matchingCreditCustomers.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setIsAddingNewCreditCustomer(false)}
+                          className="text-xs text-slate-500 hover:text-slate-800 font-semibold"
+                        >
+                          ← Back to Search
+                        </button>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                        Customer / Staff Name *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Dr. Rajesh Sharma"
+                        value={newCreditCustomerForm.customer_name}
+                        onChange={(e) => setNewCreditCustomerForm({ ...newCreditCustomerForm, customer_name: e.target.value })}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                          Department / Desk
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. CSE, Admin, Library"
+                          value={newCreditCustomerForm.department}
+                          onChange={(e) => setNewCreditCustomerForm({ ...newCreditCustomerForm, department: e.target.value })}
+                          className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                          Mobile Number
+                        </label>
+                        <input
+                          type="tel"
+                          placeholder="e.g. 9876543210"
+                          value={newCreditCustomerForm.phone}
+                          onChange={(e) => setNewCreditCustomerForm({ ...newCreditCustomerForm, phone: e.target.value })}
+                          className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                        Notes (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Faculty cabin 302"
+                        value={newCreditCustomerForm.notes}
+                        onChange={(e) => setNewCreditCustomerForm({ ...newCreditCustomerForm, notes: e.target.value })}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={posSubmitting}
+                      className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 disabled:opacity-50 text-white font-extrabold text-xs shadow-md shadow-indigo-600/20 transition-all flex items-center justify-center gap-1.5"
+                    >
+                      <Check className="w-4 h-4" />
+                      <span>Register & Place Credit Order (₹{posTotal})</span>
+                    </button>
+                  </form>
+                )}
+
+              </div>
+
+              {/* Footer */}
+              <div className="bg-slate-50 px-6 py-3 border-t border-slate-200 flex justify-between items-center shrink-0">
+                <span className="text-xs text-slate-500">
+                  {posCart.length} item(s) • Total <strong className="text-slate-900">₹{posTotal}</strong>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowCreditCustomerModal(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs transition-colors"
+                >
+                  Cancel
+                </button>
               </div>
 
             </div>

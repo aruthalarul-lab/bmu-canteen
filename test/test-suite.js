@@ -186,6 +186,22 @@ async function runTests() {
     assert(onlineCreditNoPhone.status === 400, 
       'Online credit order still strictly requires 10-digit mobile number');
 
+    // Fast-POS Credit Order WITH Name, Phone, and Department (Operator Console Search/Add flow)
+    const posCreditWithDetails = await request('POST', '/api/orders', {
+      customer_name: 'Prof. Mukherjee',
+      customer_desk: 'Mechanical Dept',
+      customer_phone: '9812345678',
+      payment_method: 'CREDIT',
+      order_type: 'COUNTER',
+      items: [{ menu_item_id: testItemId, quantity: 1 }]
+    });
+    assert(posCreditWithDetails.status === 201, 
+      'Fast-POS credit order with name, phone, and department succeeds');
+    
+    const mukherjeeAcc = await request('GET', '/api/credit/lookup?query=9812345678');
+    assert(mukherjeeAcc.status === 200 && mukherjeeAcc.body.account.customer_name === 'Prof. Mukherjee',
+      'Customer credit account is automatically updated with phone and department');
+
     console.log('\n--- Suite 6: Security & Administrative Authorization ---');
     // 1. POST /api/settings
     const settingsNoAuth = await request('POST', '/api/settings', { canteen_name: 'Hacked' });
@@ -333,6 +349,89 @@ async function runTests() {
     const restoredEmp = checkRestored.body.find(a => a.customer_name === 'Restored Employee');
     assert(restoredEmp && restoredEmp.department === 'Civil Engg' && restoredEmp.balance === 150,
       'Restored account is immediately active in credit ledger with correct department and balance');
+
+    console.log('\n--- Suite 10: Customer Credit Dues Lookup & Online UPI Settlement ---');
+    // 1. Lookup dues by phone number
+    const lookupByPhone = await request('GET', '/api/credit/lookup?query=9876543210');
+    assert(lookupByPhone.status === 200 && lookupByPhone.body.matchType === 'exact' && lookupByPhone.body.account.customer_name === 'Prof. Verma',
+      'GET /api/credit/lookup by phone returns exact matching customer account');
+    assert(lookupByPhone.body.orders.length > 0 && lookupByPhone.body.account.balance > 0,
+      'Customer statement includes itemized orders and outstanding due balance');
+
+    // 2. Lookup dues by name
+    const lookupByName = await request('GET', `/api/credit/lookup?query=${encodeURIComponent('Prof. Verma')}`);
+    assert(lookupByName.status === 200 && lookupByName.body.account.department === 'Computer Science',
+      'GET /api/credit/lookup by name returns account details and department');
+
+    // 3. Lookup non-existent returns 404
+    const lookup404 = await request('GET', '/api/credit/lookup?query=9999999999');
+    assert(lookup404.status === 404, 'GET /api/credit/lookup for non-existent returns 404');
+
+    // 4. Generate dynamic Credit UPI QR & URI
+    const creditQr = await request('GET', `/api/credit/qr?amount=${lookupByPhone.body.account.balance}&name=${encodeURIComponent('Prof. Verma')}`);
+    assert(creditQr.status === 200 && creditQr.body.upiUri.includes('pa=') && creditQr.body.qrDataUrl.startsWith('data:image/png;base64,'),
+      'GET /api/credit/qr generates dynamic UPI payment URI and base64 QR Code');
+
+    // 5. Customer submits settlement via UPI with UTR (Phase 1: Status is PENDING, balance unchanged)
+    const settleDueAmount = lookupByPhone.body.account.balance;
+    const settleRes = await request('POST', '/api/credit/customer-settle', {
+      customer_name: 'Prof. Verma',
+      phone: '9876543210',
+      amount: settleDueAmount,
+      payment_method: 'UPI',
+      utr: '426819284712'
+    });
+    assert(settleRes.status === 200 && settleRes.body.success === true && settleRes.body.status === 'PENDING',
+      'POST /api/credit/customer-settle records payment as PENDING awaiting cashier verification');
+    assert(settleRes.body.current_balance === settleDueAmount,
+      'Customer balance remains active (not zeroed) until operator confirms receipt');
+    assert(settleRes.body.utr === '426819284712', 'Settlement records 12-digit UTR reference');
+
+    // 6. Customer lookup reflects pending settlement while waiting
+    const duringPendingLookup = await request('GET', '/api/credit/lookup?query=9876543210');
+    assert(duringPendingLookup.status === 200 && duringPendingLookup.body.pendingSettlement && duringPendingLookup.body.pendingSettlement.utr === '426819284712',
+      'Customer statement shows pending settlement status and UTR');
+
+    // 7. Operator retrieves pending settlements list
+    const pendingListRes = await request('GET', '/api/credit/pending-settlements', null, { 'x-operator-pin': TEST_PIN });
+    assert(pendingListRes.status === 200 && pendingListRes.body.length > 0,
+      'GET /api/credit/pending-settlements returns pending credit settlement for operator');
+    const targetSettlement = pendingListRes.body.find(s => s.customer_name === 'Prof. Verma');
+    assert(targetSettlement && targetSettlement.utr === '426819284712' && targetSettlement.amount_paid === settleDueAmount,
+      'Pending settlement has correct customer name, amount, and UTR');
+
+    // 8. Operator clicks "Received / Verify" (Phase 2: Confirmed, balance zeroes out, orders marked PAID)
+    const verifyRes = await request('POST', `/api/credit/settlements/${targetSettlement.id}/verify`, {}, { 'x-operator-pin': TEST_PIN });
+    assert(verifyRes.status === 200 && verifyRes.body.success === true && verifyRes.body.new_balance === 0,
+      'POST /api/credit/settlements/:id/verify completes settlement and zeroes balance');
+
+    // 9. Verify finalized balance and order status
+    const afterVerifyLookup = await request('GET', '/api/credit/lookup?query=9876543210');
+    assert(afterVerifyLookup.status === 200 && afterVerifyLookup.body.account.balance === 0,
+      'Customer balance is now 0 (All Dues Cleared after operator confirmation)');
+    assert(afterVerifyLookup.body.settlements.length > 0 && afterVerifyLookup.body.settlements[0].utr === '426819284712' && afterVerifyLookup.body.settlements[0].status === 'VERIFIED',
+      'Settlement record is marked as VERIFIED in customer history');
+    assert(afterVerifyLookup.body.orders[0].payment_status === 'PAID',
+      'Unpaid credit orders are automatically marked as PAID upon operator verification');
+
+    // --- Suite 11: Daily Accounting with Token Number, Item Name & Quantity Breakdown ---
+    console.log('\n--- Suite 11: Daily Accounting, Token Numbers & Item Sales Breakdown ---');
+    const accountingRes = await request('GET', '/api/orders/daily-accounting');
+    assert(accountingRes.status === 200, 'GET /api/orders/daily-accounting returns 200 status');
+    assert(accountingRes.body && accountingRes.body.summary && accountingRes.body.item_sales && Array.isArray(accountingRes.body.orders),
+      'Returns complete daily accounting structure with summary, item_sales, and orders array');
+    assert(accountingRes.body.summary.total_orders > 0 && accountingRes.body.summary.total_items_sold > 0,
+      'Summary reports positive total orders and total items sold count');
+    assert(accountingRes.body.orders.every(o => o.token_no != null && Array.isArray(o.items) && o.items.length > 0),
+      'Every order in daily accounting includes token_no and itemized list with quantities');
+    assert(accountingRes.body.item_sales.length > 0 && accountingRes.body.item_sales[0].total_quantity > 0,
+      'Item sales breakdown correctly aggregates item names, quantities sold, and revenues');
+    
+    // Test custom date query parameter
+    const todayStr = accountingRes.body.date;
+    const customDateRes = await request('GET', `/api/orders/daily-accounting?date=${todayStr}`);
+    assert(customDateRes.status === 200 && customDateRes.body.date === todayStr,
+      'GET /api/orders/daily-accounting?date=YYYY-MM-DD filters correctly by date');
 
   } finally {
     serverProcess.kill();

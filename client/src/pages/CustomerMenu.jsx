@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { 
   Search, Plus, Minus, ShoppingBag, Clock, CheckCircle2, 
   Sparkles, AlertCircle, ArrowRight, X, Phone, User, MapPin,
-  RefreshCw, Check
+  RefreshCw, Check, CreditCard
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { playOrderReadySound } from '../utils/audio';
 import UpiModal from '../components/UpiModal';
 import UpiPaymentButtons from '../components/UpiPaymentButtons';
+import CustomerCreditModal from '../components/CustomerCreditModal';
 import socket from '../services/socket';
 
 export default function CustomerMenu({ 
@@ -40,6 +41,7 @@ export default function CustomerMenu({
   const [completedNotice, setCompletedNotice] = useState(null);
   const [upiPreview, setUpiPreview] = useState(null);
   const [loadingUpiPreview, setLoadingUpiPreview] = useState(false);
+  const [showCreditModal, setShowCreditModal] = useState(false);
 
   // Fetch menu on load
   const fetchMenu = async () => {
@@ -356,6 +358,20 @@ export default function CustomerMenu({
             <p className="mt-2 text-sm text-slate-300">
               Select items, pay with UPI QR or Cash, and get an instant live token number.
             </p>
+            <div className="mt-4 pt-3.5 border-t border-slate-700/60 flex flex-wrap items-center justify-between gap-2">
+              <span className="text-xs text-slate-300">
+                Staff / Faculty Credit Account Holder?
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowCreditModal(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-orange-500/20 hover:bg-orange-500/30 text-orange-300 border border-orange-500/40 text-xs font-bold transition-all active:scale-95 shadow-xs"
+              >
+                <CreditCard className="w-3.5 h-3.5" />
+                <span>Check My Credit Dues & Pay Online</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -955,6 +971,12 @@ export default function CustomerMenu({
           onConfirmPaid={() => setShowUpiModal(false)}
         />
       )}
+
+      {/* Customer Credit Dues & Statement Modal */}
+      <CustomerCreditModal
+        isOpen={showCreditModal}
+        onClose={() => setShowCreditModal(false)}
+      />
     </div>
   );
 }

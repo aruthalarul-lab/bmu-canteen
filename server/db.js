@@ -108,6 +108,16 @@ function initDb() {
   try {
     db.exec("UPDATE credit_accounts SET department = desk WHERE (department IS NULL OR department = '') AND desk != ''");
   } catch (e) {}
+  try {
+    db.exec("ALTER TABLE credit_settlements ADD COLUMN utr TEXT DEFAULT ''");
+  } catch (e) {
+    // Column already exists
+  }
+  try {
+    db.exec("ALTER TABLE credit_settlements ADD COLUMN status TEXT DEFAULT 'VERIFIED'");
+  } catch (e) {
+    // Column already exists
+  }
 
   // Initialize default settings if missing
   const insertSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
