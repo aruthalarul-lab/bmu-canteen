@@ -118,10 +118,40 @@ function initDb() {
   } catch (e) {
     // Column already exists
   }
+  // Database auto-repair: Reconcile cancelled and credit orders
   try {
-    db.exec("UPDATE orders SET payment_status = 'CANCELLED' WHERE status = 'CANCELLED' AND payment_status = 'PENDING'");
+    db.exec("UPDATE orders SET payment_status = 'CANCELLED' WHERE status = 'CANCELLED'");
+    
+    // Reconcile completed credit orders against verified settlements
+    const accounts = db.prepare("SELECT customer_name, balance FROM credit_accounts").all();
+    for (const acc of accounts) {
+      const setlRow = db.prepare(`
+        SELECT COALESCE(SUM(amount_paid), 0) as total 
+        FROM credit_settlements 
+        WHERE LOWER(customer_name) = LOWER(?) AND (status = 'VERIFIED' OR status IS NULL OR status = '')
+      `).get(acc.customer_name);
+      let remainingSettled = setlRow ? setlRow.total : 0;
+
+      const creditOrders = db.prepare(`
+        SELECT id, total_amount, status 
+        FROM orders 
+        WHERE LOWER(customer_name) = LOWER(?) 
+          AND payment_method = 'CREDIT' 
+          AND status = 'COMPLETED'
+        ORDER BY id ASC
+      `).all(acc.customer_name);
+
+      for (const ord of creditOrders) {
+        if (remainingSettled >= ord.total_amount) {
+          remainingSettled -= ord.total_amount;
+          db.prepare("UPDATE orders SET payment_status = 'PAID' WHERE id = ?").run(ord.id);
+        } else {
+          db.prepare("UPDATE orders SET payment_status = 'PENDING' WHERE id = ?").run(ord.id);
+        }
+      }
+    }
   } catch (e) {
-    // Ignore
+    console.warn('[DB Migration Warning]', e.message);
   }
 
   // Initialize default settings if missing
@@ -231,9 +261,42 @@ function getNextTokenNumber() {
   return (row && row.max_token) ? row.max_token + 1 : 1;
 }
 
+function reconcileCustomerCreditOrders(customerName) {
+  if (!customerName) return;
+  try {
+    const setlRow = db.prepare(`
+      SELECT COALESCE(SUM(amount_paid), 0) as total 
+      FROM credit_settlements 
+      WHERE LOWER(customer_name) = LOWER(?) AND (status = 'VERIFIED' OR status IS NULL OR status = '')
+    `).get(customerName);
+    let remainingSettled = setlRow ? setlRow.total : 0;
+
+    const creditOrders = db.prepare(`
+      SELECT id, total_amount, status 
+      FROM orders 
+      WHERE LOWER(customer_name) = LOWER(?) 
+        AND payment_method = 'CREDIT' 
+        AND status = 'COMPLETED'
+      ORDER BY id ASC
+    `).all(customerName);
+
+    for (const ord of creditOrders) {
+      if (remainingSettled >= ord.total_amount) {
+        remainingSettled -= ord.total_amount;
+        db.prepare("UPDATE orders SET payment_status = 'PAID' WHERE id = ?").run(ord.id);
+      } else {
+        db.prepare("UPDATE orders SET payment_status = 'PENDING' WHERE id = ?").run(ord.id);
+      }
+    }
+  } catch (err) {
+    console.warn('[reconcileCustomerCreditOrders Error]', err.message);
+  }
+}
+
 initDb();
 
 module.exports = {
   db,
   getNextTokenNumber,
+  reconcileCustomerCreditOrders,
 };

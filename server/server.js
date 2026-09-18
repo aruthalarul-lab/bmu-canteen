@@ -4,7 +4,7 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const path = require('path');
 const QRCode = require('qrcode');
-const { db, getNextTokenNumber } = require('./db');
+const { db, getNextTokenNumber, reconcileCustomerCreditOrders } = require('./db');
 
 const app = express();
 const server = http.createServer(app);
@@ -608,15 +608,13 @@ app.patch('/api/orders/:id/status', requireOperatorAuth, (req, res) => {
       io.emit('credit-updated', { customer_name: existing.customer_name });
 
       // For credit orders, delivering food does NOT mean cash was paid; it is delivered on credit (awaiting settlement)
-      if (!payment_status || payment_status === 'PAID') {
-        newPayStatus = 'PENDING';
-      }
+      newPayStatus = 'PENDING';
     }
   }
 
   // If order was already COMPLETED and is subsequently CANCELLED, revert the credit balance
   if (newStatus === 'CANCELLED' && existing.status !== 'CANCELLED') {
-    if (existing.status === 'COMPLETED' && existing.payment_method === 'CREDIT' && existing.payment_status === 'PENDING') {
+    if (existing.status === 'COMPLETED' && existing.payment_method === 'CREDIT') {
       db.prepare(`
         UPDATE credit_accounts 
         SET balance = MAX(0, balance - ?), updated_at = CURRENT_TIMESTAMP
@@ -624,10 +622,7 @@ app.patch('/api/orders/:id/status', requireOperatorAuth, (req, res) => {
       `).run(existing.total_amount, existing.customer_name);
       io.emit('credit-updated', { customer_name: existing.customer_name });
     }
-    // Automatically cancel pending payment status if not explicitly overridden
-    if (!payment_status && existing.payment_status === 'PENDING') {
-      newPayStatus = 'CANCELLED';
-    }
+    newPayStatus = 'CANCELLED';
   }
 
   db.prepare(`
@@ -635,6 +630,10 @@ app.patch('/api/orders/:id/status', requireOperatorAuth, (req, res) => {
     SET status = ?, payment_status = ?, updated_at = CURRENT_TIMESTAMP 
     WHERE id = ?
   `).run(newStatus, newPayStatus, id);
+
+  if (existing.payment_method === 'CREDIT') {
+    reconcileCustomerCreditOrders(existing.customer_name);
+  }
 
   const updatedOrder = getOrderWithItems(id);
 
@@ -699,6 +698,9 @@ app.get('/api/credit/accounts/:name', (req, res) => {
   if (!account) {
     return res.status(404).json({ error: 'Account not found' });
   }
+
+  // Reconcile credit orders against verified payments before fetching
+  reconcileCustomerCreditOrders(account.customer_name);
 
   // Fetch all orders placed on credit by this customer
   const orders = db.prepare(`
@@ -773,6 +775,7 @@ app.post('/api/credit/settle', requireOperatorAuth, (req, res) => {
   });
 
   const newBalance = settleTx();
+  reconcileCustomerCreditOrders(account.customer_name);
   io.emit('credit-updated', { customer_name: account.customer_name, balance: newBalance });
   res.json({ success: true, customer_name: account.customer_name, new_balance: newBalance });
 });
@@ -812,6 +815,7 @@ app.get('/api/credit/lookup', (req, res) => {
   // If exactly 1 account matched, return full enriched details (statement + orders)
   if (accounts.length === 1) {
     const account = accounts[0];
+    reconcileCustomerCreditOrders(account.customer_name);
     const orders = db.prepare(`
       SELECT * FROM orders 
       WHERE LOWER(customer_name) = LOWER(?) AND payment_method = 'CREDIT'
@@ -1002,6 +1006,7 @@ app.post('/api/credit/settlements/:id/verify', requireOperatorAuth, (req, res) =
   });
 
   const newBalance = settleTx();
+  reconcileCustomerCreditOrders(account.customer_name);
 
   // Broadcast real-time events across system
   io.emit('credit-settlement-verified', {
