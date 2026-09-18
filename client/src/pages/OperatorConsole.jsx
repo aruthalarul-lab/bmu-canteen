@@ -1581,7 +1581,7 @@ export default function OperatorConsole() {
                           <span>Cancel</span>
                         </button>
                         <button
-                          onClick={() => advanceOrderStatus(order.id, 'READY', 'PAID')}
+                          onClick={() => advanceOrderStatus(order.id, 'READY', order.payment_method === 'CREDIT' ? 'PENDING' : 'PAID')}
                           className="flex-1 py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white font-extrabold text-xs shadow-md transition-all flex items-center justify-center space-x-1.5"
                         >
                           <CheckCircle className="w-4 h-4" />
@@ -3369,10 +3369,17 @@ export default function OperatorConsole() {
 
                             const isCancelled = o.status === 'CANCELLED' || o.payment_status === 'CANCELLED';
                             const isPaid = !isCancelled && o.payment_status === 'PAID';
+                            const isDelivered = !isCancelled && !isPaid && o.status === 'COMPLETED';
 
                             return (
                               <div key={o.id} className={`p-3.5 rounded-2xl border shadow-xs space-y-2.5 ${
-                                isCancelled ? 'bg-slate-50/70 border-slate-200 opacity-80' : 'bg-white border-slate-200'
+                                isCancelled 
+                                  ? 'bg-slate-50/70 border-slate-200 opacity-80' 
+                                  : isDelivered 
+                                    ? 'bg-amber-50/40 border-amber-300' 
+                                    : isPaid 
+                                      ? 'bg-white border-slate-200' 
+                                      : 'bg-sky-50/30 border-sky-200'
                               }`}>
                                 {/* Order Header: Date, Token, Status, Bill */}
                                 <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-100">
@@ -3387,11 +3394,17 @@ export default function OperatorConsole() {
                                       <span className="px-2 py-0.5 rounded-md font-bold text-[10px] bg-rose-100 text-rose-800 border border-rose-200">
                                         ❌ CANCELLED (NO CHARGE)
                                       </span>
+                                    ) : isPaid ? (
+                                      <span className="px-2 py-0.5 rounded-md font-bold text-[10px] bg-emerald-100 text-emerald-700 border border-emerald-200">
+                                        ✓ PAID
+                                      </span>
+                                    ) : isDelivered ? (
+                                      <span className="px-2 py-0.5 rounded-md font-bold text-[10px] bg-amber-100 text-amber-900 border border-amber-300">
+                                        📦 DELIVERED (TO PAY)
+                                      </span>
                                     ) : (
-                                      <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] ${
-                                        isPaid ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'
-                                      }`}>
-                                        {isPaid ? '✓ PAID' : '⏳ UNPAID'}
+                                      <span className="px-2 py-0.5 rounded-md font-bold text-[10px] bg-sky-100 text-sky-800 border border-sky-200">
+                                        🍳 ORDERED (IN KITCHEN)
                                       </span>
                                     )}
                                   </div>
@@ -3401,8 +3414,21 @@ export default function OperatorConsole() {
                                         <span className="line-through text-slate-400 font-mono text-xs">₹{o.total_amount}</span>
                                         <span className="text-rose-600 font-mono text-xs font-extrabold">₹0 (Cancelled)</span>
                                       </div>
+                                    ) : isPaid ? (
+                                      <div className="flex items-center gap-1.5">
+                                        <span>Total: ₹{o.total_amount}</span>
+                                        <span className="text-[10px] text-emerald-700 font-bold">(Paid)</span>
+                                      </div>
+                                    ) : isDelivered ? (
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="text-amber-900 font-black">Total: ₹{o.total_amount}</span>
+                                        <span className="text-[10px] text-amber-700 font-bold">(Due)</span>
+                                      </div>
                                     ) : (
-                                      <span>Total: ₹{o.total_amount}</span>
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="text-slate-600 font-semibold">Total: ₹{o.total_amount}</span>
+                                        <span className="text-[10px] text-slate-400">(Pending Delivery)</span>
+                                      </div>
                                     )}
                                   </div>
                                 </div>

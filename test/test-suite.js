@@ -310,6 +310,9 @@ async function runTests() {
     });
     assert(creditOrderVerma.status === 201, 'Places credit order for registered staff member');
 
+    // Deliver the order to add to dues balance
+    await request('PATCH', `/api/orders/${creditOrderVerma.body.id}/status`, { status: 'COMPLETED' }, { 'x-operator-pin': TEST_PIN });
+
     // 3. Query all credit accounts (Requirement 1: name, department, phone, due amount)
     const allCreditAccounts = await request('GET', '/api/credit/accounts');
     const vermaAcc = allCreditAccounts.body.find(a => a.customer_name === 'Prof. Verma');
@@ -433,8 +436,8 @@ async function runTests() {
     assert(customDateRes.status === 200 && customDateRes.body.date === todayStr,
       'GET /api/orders/daily-accounting?date=YYYY-MM-DD filters correctly by date');
 
-    // --- Suite 12: Credit Order Cancellation & Voiding of Unpaid Dues ---
-    console.log('\n--- Suite 12: Credit Order Cancellation & Voiding of Unpaid Dues ---');
+    // --- Suite 12: Credit Order Delivery & Cancellation Lifecycle ---
+    console.log('\n--- Suite 12: Credit Order Delivery & Cancellation Lifecycle ---');
     // 1. Create a customer credit profile
     const createCancelAcc = await request('POST', '/api/credit/accounts', {
       customer_name: 'Dr. Ramesh Cancel',
@@ -454,13 +457,26 @@ async function runTests() {
       'Staff credit order created with PENDING payment status');
     const orderIdToCancel = cancelOrderRes.body.id;
 
-    // 3. Verify credit account has unpaid order count 1 and balance owed
-    const accBeforeCancel = await request('GET', '/api/credit/accounts');
-    const rameshBefore = accBeforeCancel.body.find(a => a.customer_name === 'Dr. Ramesh Cancel');
-    assert(rameshBefore && rameshBefore.unpaid_orders_count === 1 && rameshBefore.balance > 0,
-      'Customer account shows 1 unpaid order and positive dues balance before cancellation');
+    // 3. Verify balance is 0 and unpaid_orders_count is 0 while order is in kitchen (NOT delivered yet)
+    const accWhilePreparing = await request('GET', '/api/credit/accounts');
+    const rameshPreparing = accWhilePreparing.body.find(a => a.customer_name === 'Dr. Ramesh Cancel');
+    assert(rameshPreparing && rameshPreparing.balance === 0 && rameshPreparing.unpaid_orders_count === 0,
+      'Credit dues balance is 0 and unpaid count is 0 while food is preparing in kitchen');
 
-    // 4. Operator cancels the order
+    // 4. Operator delivers the order (status: COMPLETED)
+    const deliverRes = await request('PATCH', `/api/orders/${orderIdToCancel}/status`, {
+      status: 'COMPLETED'
+    }, { 'x-operator-pin': TEST_PIN });
+    assert(deliverRes.status === 200 && deliverRes.body.status === 'COMPLETED' && deliverRes.body.payment_status === 'PENDING',
+      'Food delivered: order status is COMPLETED and payment_status remains PENDING (DELIVERED TO PAY)');
+
+    // 5. Verify customer account now has positive balance and 1 unpaid delivered order
+    const accAfterDelivery = await request('GET', '/api/credit/accounts');
+    const rameshDelivered = accAfterDelivery.body.find(a => a.customer_name === 'Dr. Ramesh Cancel');
+    assert(rameshDelivered && rameshDelivered.balance > 0 && rameshDelivered.unpaid_orders_count === 1,
+      'Customer credit dues balance added and unpaid count is 1 after delivery');
+
+    // 6. Operator cancels the delivered order
     const patchCancelRes = await request('PATCH', `/api/orders/${orderIdToCancel}/status`, {
       status: 'CANCELLED'
     }, { 'x-operator-pin': TEST_PIN });
@@ -469,13 +485,13 @@ async function runTests() {
     assert(patchCancelRes.body.payment_status === 'CANCELLED',
       'Cancelled credit order automatically has payment_status changed to CANCELLED');
 
-    // 5. Verify customer account balance reverted and unpaid_orders_count is 0
+    // 7. Verify customer account balance reverted and unpaid_orders_count is 0
     const accAfterCancel = await request('GET', '/api/credit/accounts');
     const rameshAfter = accAfterCancel.body.find(a => a.customer_name === 'Dr. Ramesh Cancel');
     assert(rameshAfter && rameshAfter.unpaid_orders_count === 0 && rameshAfter.balance === 0,
       'Customer account balance reverted to 0 and unpaid_orders_count is 0 after cancellation');
 
-    // 6. Verify ledger itemized statement shows status CANCELLED
+    // 8. Verify ledger itemized statement shows status CANCELLED
     const ledgerAfterCancel = await request('GET', `/api/credit/accounts/${encodeURIComponent('Dr. Ramesh Cancel')}`);
     assert(ledgerAfterCancel.status === 200 && ledgerAfterCancel.body.orders[0].status === 'CANCELLED' && ledgerAfterCancel.body.orders[0].payment_status === 'CANCELLED',
       'Customer ledger statement reports order status CANCELLED and payment_status CANCELLED');

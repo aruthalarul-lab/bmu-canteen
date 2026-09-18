@@ -514,25 +514,24 @@ app.post('/api/orders', async (req, res) => {
         itemInsert.run(orderId, vi.menu_item_id, vi.item_name, vi.price, vi.quantity, vi.total_price);
       }
 
-      // If placed on Credit, automatically update customer credit account
+      // If placed on Credit, ensure customer credit profile exists; balance is added upon delivery
       if (finalPaymentMethod === 'CREDIT') {
         const cleanDept = (cleanCustomerDesk || '').trim();
         const existingAcc = db.prepare('SELECT * FROM credit_accounts WHERE LOWER(customer_name) = LOWER(?)').get(cleanCustomerName);
         if (existingAcc) {
           db.prepare(`
             UPDATE credit_accounts 
-            SET balance = balance + ?, 
-                phone = CASE WHEN ? != '' THEN ? ELSE phone END,
+            SET phone = CASE WHEN ? != '' THEN ? ELSE phone END,
                 department = CASE WHEN ? != '' THEN ? ELSE department END,
                 desk = CASE WHEN ? != '' THEN ? ELSE desk END,
                 updated_at = CURRENT_TIMESTAMP 
             WHERE id = ?
-          `).run(calculatedTotal, cleanCustomerPhone, cleanCustomerPhone, cleanDept, cleanDept, cleanCustomerDesk, cleanCustomerDesk, existingAcc.id);
+          `).run(cleanCustomerPhone, cleanCustomerPhone, cleanDept, cleanDept, cleanCustomerDesk, cleanCustomerDesk, existingAcc.id);
         } else {
           db.prepare(`
             INSERT INTO credit_accounts (customer_name, department, phone, desk, balance) 
-            VALUES (?, ?, ?, ?, ?)
-          `).run(cleanCustomerName, cleanDept, cleanCustomerPhone, cleanCustomerDesk, calculatedTotal);
+            VALUES (?, ?, ?, ?, 0)
+          `).run(cleanCustomerName, cleanDept, cleanCustomerPhone, cleanCustomerDesk);
         }
       }
 
@@ -598,12 +597,29 @@ app.patch('/api/orders/:id/status', requireOperatorAuth, (req, res) => {
   const newStatus = status && validStatuses.includes(status) ? status : existing.status;
   let newPayStatus = payment_status ? payment_status : existing.payment_status;
 
-  // If order is cancelled, revert pending credit if it was charged to staff credit
-  if (newStatus === 'CANCELLED' && existing.status !== 'CANCELLED') {
-    if (existing.payment_method === 'CREDIT' && existing.payment_status === 'PENDING') {
+  // When order is DELIVERED (COMPLETED), add to customer credit dues if placed on CREDIT
+  if (newStatus === 'COMPLETED' && existing.status !== 'COMPLETED') {
+    if (existing.payment_method === 'CREDIT') {
       db.prepare(`
         UPDATE credit_accounts 
-        SET balance = MAX(0, balance - ?) 
+        SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP
+        WHERE LOWER(customer_name) = LOWER(?)
+      `).run(existing.total_amount, existing.customer_name);
+      io.emit('credit-updated', { customer_name: existing.customer_name });
+
+      // For credit orders, delivering food does NOT mean cash was paid; it is delivered on credit (awaiting settlement)
+      if (!payment_status || payment_status === 'PAID') {
+        newPayStatus = 'PENDING';
+      }
+    }
+  }
+
+  // If order was already COMPLETED and is subsequently CANCELLED, revert the credit balance
+  if (newStatus === 'CANCELLED' && existing.status !== 'CANCELLED') {
+    if (existing.status === 'COMPLETED' && existing.payment_method === 'CREDIT' && existing.payment_status === 'PENDING') {
+      db.prepare(`
+        UPDATE credit_accounts 
+        SET balance = MAX(0, balance - ?), updated_at = CURRENT_TIMESTAMP
         WHERE LOWER(customer_name) = LOWER(?)
       `).run(existing.total_amount, existing.customer_name);
       io.emit('credit-updated', { customer_name: existing.customer_name });
@@ -635,7 +651,7 @@ app.get('/api/credit/accounts', (req, res) => {
   const accounts = db.prepare(`
     SELECT 
       ca.*,
-      (SELECT COUNT(*) FROM orders o WHERE LOWER(o.customer_name) = LOWER(ca.customer_name) AND o.payment_method = 'CREDIT' AND o.payment_status = 'PENDING' AND o.status != 'CANCELLED') as unpaid_orders_count,
+      (SELECT COUNT(*) FROM orders o WHERE LOWER(o.customer_name) = LOWER(ca.customer_name) AND o.payment_method = 'CREDIT' AND o.payment_status = 'PENDING' AND o.status = 'COMPLETED') as unpaid_orders_count,
       (SELECT MAX(created_at) FROM orders o WHERE LOWER(o.customer_name) = LOWER(ca.customer_name) AND o.payment_method = 'CREDIT') as last_order_date
     FROM credit_accounts ca
     ORDER BY ca.balance DESC, ca.customer_name ASC

@@ -406,16 +406,21 @@ export default function CustomerCreditModal({ isOpen, onClose }) {
                   ) : (
                     accountData.orders.map((order) => {
                       const isCancelled = order.status === 'CANCELLED' || order.payment_status === 'CANCELLED';
-                      const isPending = !isCancelled && order.payment_status === 'PENDING';
+                      const isPaid = !isCancelled && order.payment_status === 'PAID';
+                      const isDelivered = !isCancelled && !isPaid && order.status === 'COMPLETED';
+                      const isPreparing = !isCancelled && !isPaid && !isDelivered;
+
                       return (
                         <div 
                           key={order.id} 
                           className={'rounded-2xl border p-3.5 space-y-2.5 transition-all ' + (
                             isCancelled 
                               ? 'bg-slate-50/70 border-slate-200 opacity-80' 
-                              : isPending 
-                                ? 'bg-amber-50/40 border-amber-200' 
-                                : 'bg-white border-slate-200/80'
+                              : isDelivered 
+                                ? 'bg-amber-50/60 border-amber-300 shadow-xs' 
+                                : isPaid 
+                                  ? 'bg-white border-slate-200/80'
+                                  : 'bg-sky-50/40 border-sky-200'
                           )}
                         >
                           <div className="flex items-center justify-between text-xs">
@@ -430,9 +435,17 @@ export default function CustomerCreditModal({ isOpen, onClose }) {
                               <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide bg-rose-100 text-rose-800 border border-rose-200">
                                 CANCELLED (NO CHARGE)
                               </span>
+                            ) : isPaid ? (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                ✓ PAID
+                              </span>
+                            ) : isDelivered ? (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide bg-amber-100 text-amber-900 border border-amber-300">
+                                DELIVERED (TO PAY)
+                              </span>
                             ) : (
-                              <span className={'px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide ' + (isPending ? 'bg-amber-200 text-amber-900' : 'bg-emerald-100 text-emerald-800')}>
-                                {isPending ? 'UNPAID / PENDING' : 'PAID'}
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide bg-sky-100 text-sky-800 border border-sky-200">
+                                ORDERED (IN KITCHEN)
                               </span>
                             )}
                           </div>
@@ -466,8 +479,21 @@ export default function CustomerCreditModal({ isOpen, onClose }) {
                                   <span className="font-mono text-xs line-through text-slate-400">₹{order.total_amount}</span>
                                   <span className="font-mono font-extrabold text-xs text-rose-600">₹0 (Cancelled)</span>
                                 </div>
+                              ) : isPaid ? (
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-mono font-extrabold text-sm text-slate-900">₹{order.total_amount}</span>
+                                  <span className="text-[11px] font-bold text-emerald-700">(Paid)</span>
+                                </div>
+                              ) : isDelivered ? (
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-mono font-extrabold text-sm text-amber-900">₹{order.total_amount}</span>
+                                  <span className="text-[11px] font-extrabold text-amber-700">(Due)</span>
+                                </div>
                               ) : (
-                                <span className="font-mono font-extrabold text-sm text-slate-900">₹{order.total_amount}</span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-mono font-semibold text-sm text-slate-700">₹{order.total_amount}</span>
+                                  <span className="text-[11px] text-slate-500">(Pending Delivery)</span>
+                                </div>
                               )}
                             </div>
                           </div>
