@@ -118,6 +118,11 @@ function initDb() {
   } catch (e) {
     // Column already exists
   }
+  try {
+    db.exec("UPDATE orders SET payment_status = 'CANCELLED' WHERE status = 'CANCELLED' AND payment_status = 'PENDING'");
+  } catch (e) {
+    // Ignore
+  }
 
   // Initialize default settings if missing
   const insertSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');

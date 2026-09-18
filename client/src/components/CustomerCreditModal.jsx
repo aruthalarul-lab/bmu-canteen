@@ -405,9 +405,19 @@ export default function CustomerCreditModal({ isOpen, onClose }) {
                     <div className="text-center py-8 text-slate-400 text-xs">No credit orders recorded yet.</div>
                   ) : (
                     accountData.orders.map((order) => {
-                      const isPending = order.payment_status === 'PENDING';
+                      const isCancelled = order.status === 'CANCELLED' || order.payment_status === 'CANCELLED';
+                      const isPending = !isCancelled && order.payment_status === 'PENDING';
                       return (
-                        <div key={order.id} className={'rounded-2xl border p-3.5 space-y-2.5 transition-all ' + (isPending ? 'bg-amber-50/40 border-amber-200' : 'bg-white border-slate-200/80')}>
+                        <div 
+                          key={order.id} 
+                          className={'rounded-2xl border p-3.5 space-y-2.5 transition-all ' + (
+                            isCancelled 
+                              ? 'bg-slate-50/70 border-slate-200 opacity-80' 
+                              : isPending 
+                                ? 'bg-amber-50/40 border-amber-200' 
+                                : 'bg-white border-slate-200/80'
+                          )}
+                        >
                           <div className="flex items-center justify-between text-xs">
                             <div className="flex items-center gap-2">
                               <span className="font-mono font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded-md">Token #{order.token_no}</span>
@@ -416,9 +426,15 @@ export default function CustomerCreditModal({ isOpen, onClose }) {
                                 {new Date(order.created_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                               </span>
                             </div>
-                            <span className={'px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide ' + (isPending ? 'bg-amber-200 text-amber-900' : 'bg-emerald-100 text-emerald-800')}>
-                              {isPending ? 'UNPAID / PENDING' : 'PAID'}
-                            </span>
+                            {isCancelled ? (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide bg-rose-100 text-rose-800 border border-rose-200">
+                                CANCELLED (NO CHARGE)
+                              </span>
+                            ) : (
+                              <span className={'px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide ' + (isPending ? 'bg-amber-200 text-amber-900' : 'bg-emerald-100 text-emerald-800')}>
+                                {isPending ? 'UNPAID / PENDING' : 'PAID'}
+                              </span>
+                            )}
                           </div>
                           <div className="bg-white rounded-xl border border-slate-200/80 overflow-hidden text-xs">
                             <table className="w-full text-left">
@@ -444,7 +460,16 @@ export default function CustomerCreditModal({ isOpen, onClose }) {
                           </div>
                           <div className="flex justify-between items-center text-xs px-1">
                             <span className="text-slate-500">Order Total</span>
-                            <span className="font-mono font-extrabold text-sm text-slate-900">₹{order.total_amount}</span>
+                            <div className="text-right">
+                              {isCancelled ? (
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono text-xs line-through text-slate-400">₹{order.total_amount}</span>
+                                  <span className="font-mono font-extrabold text-xs text-rose-600">₹0 (Cancelled)</span>
+                                </div>
+                              ) : (
+                                <span className="font-mono font-extrabold text-sm text-slate-900">₹{order.total_amount}</span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       );

@@ -596,7 +596,7 @@ app.patch('/api/orders/:id/status', requireOperatorAuth, (req, res) => {
 
   const validStatuses = ['PENDING', 'PREPARING', 'READY', 'COMPLETED', 'CANCELLED'];
   const newStatus = status && validStatuses.includes(status) ? status : existing.status;
-  const newPayStatus = payment_status ? payment_status : existing.payment_status;
+  let newPayStatus = payment_status ? payment_status : existing.payment_status;
 
   // If order is cancelled, revert pending credit if it was charged to staff credit
   if (newStatus === 'CANCELLED' && existing.status !== 'CANCELLED') {
@@ -607,6 +607,10 @@ app.patch('/api/orders/:id/status', requireOperatorAuth, (req, res) => {
         WHERE LOWER(customer_name) = LOWER(?)
       `).run(existing.total_amount, existing.customer_name);
       io.emit('credit-updated', { customer_name: existing.customer_name });
+    }
+    // Automatically cancel pending payment status if not explicitly overridden
+    if (!payment_status && existing.payment_status === 'PENDING') {
+      newPayStatus = 'CANCELLED';
     }
   }
 
@@ -631,7 +635,7 @@ app.get('/api/credit/accounts', (req, res) => {
   const accounts = db.prepare(`
     SELECT 
       ca.*,
-      (SELECT COUNT(*) FROM orders o WHERE LOWER(o.customer_name) = LOWER(ca.customer_name) AND o.payment_method = 'CREDIT' AND o.payment_status = 'PENDING') as unpaid_orders_count,
+      (SELECT COUNT(*) FROM orders o WHERE LOWER(o.customer_name) = LOWER(ca.customer_name) AND o.payment_method = 'CREDIT' AND o.payment_status = 'PENDING' AND o.status != 'CANCELLED') as unpaid_orders_count,
       (SELECT MAX(created_at) FROM orders o WHERE LOWER(o.customer_name) = LOWER(ca.customer_name) AND o.payment_method = 'CREDIT') as last_order_date
     FROM credit_accounts ca
     ORDER BY ca.balance DESC, ca.customer_name ASC

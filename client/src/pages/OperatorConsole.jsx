@@ -3367,8 +3367,13 @@ export default function OperatorConsole() {
                               hour12: true
                             });
 
+                            const isCancelled = o.status === 'CANCELLED' || o.payment_status === 'CANCELLED';
+                            const isPaid = !isCancelled && o.payment_status === 'PAID';
+
                             return (
-                              <div key={o.id} className="p-3.5 bg-white rounded-2xl border border-slate-200 shadow-xs space-y-2.5">
+                              <div key={o.id} className={`p-3.5 rounded-2xl border shadow-xs space-y-2.5 ${
+                                isCancelled ? 'bg-slate-50/70 border-slate-200 opacity-80' : 'bg-white border-slate-200'
+                              }`}>
                                 {/* Order Header: Date, Token, Status, Bill */}
                                 <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-100">
                                   <div className="flex items-center gap-2">
@@ -3378,14 +3383,27 @@ export default function OperatorConsole() {
                                     <span className="text-xs font-semibold text-slate-700">
                                       📅 {orderDate}
                                     </span>
-                                    <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] ${
-                                      o.payment_status === 'PAID' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'
-                                    }`}>
-                                      {o.payment_status === 'PAID' ? '✓ PAID' : '⏳ UNPAID'}
-                                    </span>
+                                    {isCancelled ? (
+                                      <span className="px-2 py-0.5 rounded-md font-bold text-[10px] bg-rose-100 text-rose-800 border border-rose-200">
+                                        ❌ CANCELLED (NO CHARGE)
+                                      </span>
+                                    ) : (
+                                      <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] ${
+                                        isPaid ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'
+                                      }`}>
+                                        {isPaid ? '✓ PAID' : '⏳ UNPAID'}
+                                      </span>
+                                    )}
                                   </div>
                                   <div className="text-right font-black text-sm text-slate-900">
-                                    Total: ₹{o.total_amount}
+                                    {isCancelled ? (
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="line-through text-slate-400 font-mono text-xs">₹{o.total_amount}</span>
+                                        <span className="text-rose-600 font-mono text-xs font-extrabold">₹0 (Cancelled)</span>
+                                      </div>
+                                    ) : (
+                                      <span>Total: ₹{o.total_amount}</span>
+                                    )}
                                   </div>
                                 </div>
 
