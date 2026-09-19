@@ -1215,77 +1215,146 @@ export default function OperatorConsole() {
       <div className="max-w-7xl mx-auto space-y-4">
         
         {/* Top Summary Bar & Quick Stats */}
-        <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80 flex flex-wrap items-center justify-between gap-4 print:hidden">
-          {/* Daily Tally */}
-          <div className="flex flex-wrap items-center gap-4 sm:gap-6 text-xs sm:text-sm">
-            <div>
-              <span className="text-slate-400 block font-medium">Today's Sales</span>
-              <span className="text-xl sm:text-2xl font-black text-slate-900">
-                ₹{stats?.total_sales || 0}
-              </span>
+        <div className="bg-white rounded-xl sm:rounded-2xl p-2.5 sm:p-4 shadow-xs sm:shadow-sm border border-slate-200/80 print:hidden">
+          {/* Mobile View: Compact Executive Mini-Dashboard */}
+          <div className="sm:hidden space-y-2">
+            {/* Top row: Main Sales & Quick Action Buttons */}
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block leading-none">Today's Sales</span>
+                <span className="text-lg font-black text-slate-900 leading-tight">
+                  ₹{stats?.total_sales || 0}
+                </span>
+              </div>
+
+              {/* Compact Audio Chime & Console Lock Controls */}
+              <div className="flex items-center space-x-1.5">
+                <button
+                  onClick={() => playNewOrderSound()}
+                  className="px-2 py-1 rounded-lg bg-orange-50 hover:bg-orange-100 text-orange-700 font-bold text-[11px] border border-orange-200 flex items-center space-x-1 active:scale-95 transition-all shadow-2xs"
+                  title="Test Chime Sound"
+                >
+                  <Bell className="w-3 h-3 text-orange-600" />
+                  <span>Chime</span>
+                </button>
+
+                <button
+                  onClick={() => setAudioEnabled(!audioEnabled)}
+                  className={`p-1.5 rounded-lg border text-[11px] font-bold flex items-center justify-center active:scale-95 transition-all shadow-2xs ${
+                    audioEnabled
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                      : 'bg-rose-50 text-rose-700 border-rose-300'
+                  }`}
+                  title={audioEnabled ? 'Sound ON' : 'Muted'}
+                >
+                  {audioEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+                </button>
+
+                <button
+                  onClick={handleLockConsole}
+                  className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-700 font-bold text-[11px] border border-slate-200 flex items-center space-x-1 active:scale-95 transition-all shadow-2xs"
+                  title="Lock Console (Staff Logout)"
+                >
+                  <Lock className="w-3 h-3" />
+                  <span>Lock</span>
+                </button>
+              </div>
             </div>
-            <div className="h-8 w-[1px] bg-slate-200 hidden sm:block"></div>
-            <div>
-              <span className="text-slate-400 block font-medium">💵 Cash</span>
-              <span className="text-base sm:text-lg font-bold text-emerald-600">
-                ₹{stats?.cash_sales || 0}
-              </span>
-            </div>
-            <div>
-              <span className="text-slate-400 block font-medium">⚡ UPI</span>
-              <span className="text-base sm:text-lg font-bold text-orange-600">
-                ₹{stats?.upi_sales || 0}
-              </span>
-            </div>
-            <div>
-              <span className="text-slate-400 block font-medium">📋 Weekly Credit Due</span>
-              <span className="text-base sm:text-lg font-bold text-indigo-600">
-                ₹{creditStats?.total_due || 0}
-              </span>
-            </div>
-            <div className="h-8 w-[1px] bg-slate-200 hidden sm:block"></div>
-            <div>
-              <span className="text-slate-400 block font-medium">Active Queue</span>
-              <span className="text-base sm:text-lg font-bold text-slate-800">
-                {orders.length} orders
-              </span>
+
+            {/* Bottom mini-metrics row */}
+            <div className="grid grid-cols-4 gap-1.5 pt-1.5 border-t border-slate-100 text-center">
+              <div className="bg-slate-50 rounded-lg py-1 px-1 border border-slate-100">
+                <span className="text-[9px] font-bold text-slate-400 block truncate">💵 Cash</span>
+                <span className="text-xs font-black text-emerald-600 block truncate">₹{stats?.cash_sales || 0}</span>
+              </div>
+              <div className="bg-slate-50 rounded-lg py-1 px-1 border border-slate-100">
+                <span className="text-[9px] font-bold text-slate-400 block truncate">⚡ UPI</span>
+                <span className="text-xs font-black text-orange-600 block truncate">₹{stats?.upi_sales || 0}</span>
+              </div>
+              <div className="bg-slate-50 rounded-lg py-1 px-1 border border-slate-100">
+                <span className="text-[9px] font-bold text-slate-400 block truncate">📋 Due</span>
+                <span className="text-xs font-black text-indigo-600 block truncate">₹{creditStats?.total_due || 0}</span>
+              </div>
+              <div className="bg-slate-50 rounded-lg py-1 px-1 border border-slate-100">
+                <span className="text-[9px] font-bold text-slate-400 block truncate">Active</span>
+                <span className="text-xs font-black text-slate-800 block truncate">{orders.length} Q</span>
+              </div>
             </div>
           </div>
 
-          {/* Audio Chime & Console Lock Controls */}
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={() => {
-                playNewOrderSound();
-              }}
-              className="px-3 py-1.5 rounded-xl bg-orange-50 hover:bg-orange-100 text-orange-700 font-semibold text-xs border border-orange-200 flex items-center space-x-1.5 transition-colors"
-              title="Test the chime sound"
-            >
-              <Bell className="w-3.5 h-3.5 text-orange-600" />
-              <span>Test Chime</span>
-            </button>
+          {/* Desktop / Tablet View (Original Spacious Layout) */}
+          <div className="hidden sm:flex sm:flex-wrap sm:items-center sm:justify-between sm:gap-4">
+            {/* Daily Tally */}
+            <div className="flex flex-wrap items-center gap-4 sm:gap-6 text-xs sm:text-sm">
+              <div>
+                <span className="text-slate-400 block font-medium">Today's Sales</span>
+                <span className="text-xl sm:text-2xl font-black text-slate-900">
+                  ₹{stats?.total_sales || 0}
+                </span>
+              </div>
+              <div className="h-8 w-[1px] bg-slate-200 hidden sm:block"></div>
+              <div>
+                <span className="text-slate-400 block font-medium">💵 Cash</span>
+                <span className="text-base sm:text-lg font-bold text-emerald-600">
+                  ₹{stats?.cash_sales || 0}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400 block font-medium">⚡ UPI</span>
+                <span className="text-base sm:text-lg font-bold text-orange-600">
+                  ₹{stats?.upi_sales || 0}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400 block font-medium">📋 Weekly Credit Due</span>
+                <span className="text-base sm:text-lg font-bold text-indigo-600">
+                  ₹{creditStats?.total_due || 0}
+                </span>
+              </div>
+              <div className="h-8 w-[1px] bg-slate-200 hidden sm:block"></div>
+              <div>
+                <span className="text-slate-400 block font-medium">Active Queue</span>
+                <span className="text-base sm:text-lg font-bold text-slate-800">
+                  {orders.length} orders
+                </span>
+              </div>
+            </div>
 
-            <button
-              onClick={() => setAudioEnabled(!audioEnabled)}
-              className={`p-2 rounded-xl border text-xs font-bold flex items-center space-x-1.5 transition-colors ${
-                audioEnabled
-                  ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
-                  : 'bg-rose-50 text-rose-700 border-rose-300'
-              }`}
-              title="Toggle Audio Notifications"
-            >
-              {audioEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-              <span className="hidden sm:inline">{audioEnabled ? 'Sound ON' : 'Muted'}</span>
-            </button>
+            {/* Audio Chime & Console Lock Controls */}
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => {
+                  playNewOrderSound();
+                }}
+                className="px-3 py-1.5 rounded-xl bg-orange-50 hover:bg-orange-100 text-orange-700 font-semibold text-xs border border-orange-200 flex items-center space-x-1.5 transition-colors"
+                title="Test the chime sound"
+              >
+                <Bell className="w-3.5 h-3.5 text-orange-600" />
+                <span>Test Chime</span>
+              </button>
 
-            <button
-              onClick={handleLockConsole}
-              className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-700 font-semibold text-xs border border-slate-200 flex items-center space-x-1.5 transition-colors"
-              title="Lock Console (Staff Logout)"
-            >
-              <Lock className="w-3.5 h-3.5" />
-              <span>Lock</span>
-            </button>
+              <button
+                onClick={() => setAudioEnabled(!audioEnabled)}
+                className={`p-2 rounded-xl border text-xs font-bold flex items-center space-x-1.5 transition-colors ${
+                  audioEnabled
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                    : 'bg-rose-50 text-rose-700 border-rose-300'
+                }`}
+                title="Toggle Audio Notifications"
+              >
+                {audioEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+                <span className="hidden sm:inline">{audioEnabled ? 'Sound ON' : 'Muted'}</span>
+              </button>
+
+              <button
+                onClick={handleLockConsole}
+                className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-700 font-semibold text-xs border border-slate-200 flex items-center space-x-1.5 transition-colors"
+                title="Lock Console (Staff Logout)"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span>Lock</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1885,58 +1954,65 @@ export default function OperatorConsole() {
                 ))}
               </div>
 
-              {/* Big Touch Item Grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {menuItems
-                  .filter(i => posCategory === 'ALL' || String(i.category_id) === String(posCategory))
-                  .sort((a, b) => {
-                    if ((b.is_available === 1 ? 1 : 0) !== (a.is_available === 1 ? 1 : 0)) {
-                      return (b.is_available === 1 ? 1 : 0) - (a.is_available === 1 ? 1 : 0);
-                    }
-                    return (b.is_quick_item === 1 ? 1 : 0) - (a.is_quick_item === 1 ? 1 : 0);
-                  })
-                  .map(item => {
-                    const isAvailable = item.is_available === 1;
-                    return (
-                      <button
-                        key={item.id}
-                        disabled={!isAvailable}
-                        onClick={() => addToPosCart(item)}
-                        className={`p-4 rounded-2xl border text-left flex flex-col justify-between h-28 active:scale-95 transition-all shadow-sm ${
-                          !isAvailable
-                            ? 'opacity-40 bg-slate-100 border-slate-200 cursor-not-allowed'
-                            : 'bg-white hover:border-orange-400 hover:shadow-md border-slate-200/90'
-                        }`}
-                      >
-                        <div className="flex items-start justify-between w-full">
-                          <span className="text-2xl select-none">{item.image_emoji || '🍲'}</span>
-                          <div className="text-right">
-                            <span className="font-extrabold text-sm text-slate-900 block">₹{item.price}</span>
-                            {item.is_quick_item === 1 && (
-                              <span className="inline-flex items-center gap-0.5 text-[9px] font-black bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-md border border-amber-200">
-                                <Star className="w-2.5 h-2.5 fill-amber-500 text-amber-500" /> Special
-                              </span>
-                            )}
+              {/* Touch Item Grid - Scrollable on Mobile to keep ticket visible */}
+              <div className="max-h-[38vh] sm:max-h-[46vh] lg:max-h-none overflow-y-auto overscroll-contain pr-1 custom-scrollbar">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
+                  {menuItems
+                    .filter(i => posCategory === 'ALL' || String(i.category_id) === String(posCategory))
+                    .sort((a, b) => {
+                      if ((b.is_available === 1 ? 1 : 0) !== (a.is_available === 1 ? 1 : 0)) {
+                        return (b.is_available === 1 ? 1 : 0) - (a.is_available === 1 ? 1 : 0);
+                      }
+                      return (b.is_quick_item === 1 ? 1 : 0) - (a.is_quick_item === 1 ? 1 : 0);
+                    })
+                    .map(item => {
+                      const isAvailable = item.is_available === 1;
+                      return (
+                        <button
+                          key={item.id}
+                          disabled={!isAvailable}
+                          onClick={() => addToPosCart(item)}
+                          className={`p-2 sm:p-4 rounded-xl sm:rounded-2xl border text-left flex flex-col justify-between h-20 sm:h-28 active:scale-95 transition-all shadow-xs sm:shadow-sm ${
+                            !isAvailable
+                              ? 'opacity-40 bg-slate-100 border-slate-200 cursor-not-allowed'
+                              : 'bg-white hover:border-orange-400 hover:shadow-md border-slate-200/90'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between w-full">
+                            <span className="text-xl sm:text-2xl select-none">{item.image_emoji || '🍲'}</span>
+                            <div className="text-right">
+                              <span className="font-extrabold text-xs sm:text-sm text-slate-900 block">₹{item.price}</span>
+                              {item.is_quick_item === 1 && (
+                                <span className="inline-flex items-center gap-0.5 text-[8px] sm:text-[9px] font-black bg-amber-100 text-amber-800 px-1 sm:px-1.5 py-0.2 sm:py-0.5 rounded-md border border-amber-200">
+                                  <Star className="w-2 sm:w-2.5 h-2 sm:h-2.5 fill-amber-500 text-amber-500" /> Special
+                                </span>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                        <div>
-                          <p className="font-bold text-xs sm:text-sm text-slate-900 line-clamp-1 leading-tight">
-                            {item.name}
-                          </p>
-                          <span className="text-[10px] text-slate-400 block">{item.category_name}</span>
-                        </div>
-                      </button>
-                    );
-                  })}
+                          <div>
+                            <p className="font-bold text-xs sm:text-sm text-slate-900 line-clamp-1 leading-tight">
+                              {item.name}
+                            </p>
+                            <span className="text-[9px] sm:text-[10px] text-slate-400 block truncate">{item.category_name}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                </div>
               </div>
             </div>
 
-            {/* Right: POS Ticket & 2-Tap Payment */}
-            <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-lg flex flex-col h-[calc(100vh-14rem)] min-h-[500px]">
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            {/* Right: POS Ticket & 2-Tap Payment - Visible at Bottom on Mobile */}
+            <div className="bg-white rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 border border-slate-200 shadow-md sm:shadow-lg flex flex-col lg:h-[calc(100vh-14rem)] lg:min-h-[500px]">
+              <div className="flex items-center justify-between pb-2 sm:pb-3 border-b border-slate-100">
                 <div className="flex items-center space-x-2">
-                  <CreditCard className="w-5 h-5 text-orange-500" />
-                  <h3 className="font-extrabold text-base text-slate-900">Current Ticket</h3>
+                  <CreditCard className="w-4 h-4 sm:w-5 sm:h-5 text-orange-500" />
+                  <h3 className="font-extrabold text-sm sm:text-base text-slate-900">Current Ticket</h3>
+                  {posCart.length > 0 && (
+                    <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-orange-100 text-orange-800">
+                      {posCart.reduce((sum, i) => sum + i.quantity, 0)} items
+                    </span>
+                  )}
                 </div>
                 {posCart.length > 0 && (
                   <button 
@@ -1950,45 +2026,45 @@ export default function OperatorConsole() {
 
               {/* Pos Token Success Notification */}
               {posLastPlacedToken && (
-                <div className="my-2 p-3 bg-emerald-50 border border-emerald-300 rounded-2xl flex items-center space-x-3 animate-slide-up">
-                  <Check className="w-5 h-5 text-emerald-600 stroke-[3]" />
+                <div className="my-1.5 sm:my-2 p-2 sm:p-3 bg-emerald-50 border border-emerald-300 rounded-xl sm:rounded-2xl flex items-center space-x-2 sm:space-x-3 animate-slide-up">
+                  <Check className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-600 stroke-[3]" />
                   <div>
-                    <span className="text-xs font-bold text-emerald-900 block">Order Placed!</span>
-                    <span className="text-lg font-black text-emerald-700 font-mono-code">Token #{posLastPlacedToken}</span>
+                    <span className="text-[11px] sm:text-xs font-bold text-emerald-900 block">Order Placed!</span>
+                    <span className="text-base sm:text-lg font-black text-emerald-700 font-mono-code">Token #{posLastPlacedToken}</span>
                   </div>
                 </div>
               )}
 
-              {/* Ticket Items */}
-              <div className="flex-1 overflow-y-auto py-3 space-y-2">
+              {/* Ticket Items - Always showing selected item(s) on mobile */}
+              <div className="max-h-[120px] sm:max-h-[160px] lg:flex-1 lg:max-h-none overflow-y-auto py-1.5 sm:py-3 space-y-1.5 overscroll-contain">
                 {posCart.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center text-center text-slate-400 p-4">
-                    <p className="text-sm font-semibold">Ticket is empty</p>
-                    <p className="text-xs mt-1">Tap items on the left to add to bill.</p>
+                  <div className="py-3 lg:h-full flex flex-col items-center justify-center text-center text-slate-400 p-2 sm:p-4">
+                    <p className="text-xs sm:text-sm font-semibold">Ticket is empty</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">Tap items above to add to bill.</p>
                   </div>
                 ) : (
                   posCart.map(item => (
-                    <div key={item.id} className="flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-200/60">
+                    <div key={item.id} className="flex items-center justify-between p-1.5 sm:p-2 rounded-lg sm:rounded-xl bg-slate-50 border border-slate-200/60">
                       <div className="flex-1 min-w-0 pr-2">
                         <p className="font-bold text-xs text-slate-800 truncate">{item.name}</p>
-                        <p className="text-[11px] text-slate-400">₹{item.price} each</p>
+                        <p className="text-[10px] sm:text-[11px] text-slate-400">₹{item.price} each</p>
                       </div>
 
-                      <div className="flex items-center space-x-2">
+                      <div className="flex items-center space-x-1.5 sm:space-x-2">
                         <button
                           onClick={() => updatePosQty(item.id, -1)}
-                          className="w-6 h-6 rounded bg-slate-200 text-slate-700 flex items-center justify-center font-bold"
+                          className="w-5 h-5 sm:w-6 sm:h-6 rounded bg-slate-200 hover:bg-slate-300 active:scale-95 text-slate-700 flex items-center justify-center font-bold text-xs"
                         >
                           -
                         </button>
-                        <span className="text-xs font-black min-w-[16px] text-center">{item.quantity}</span>
+                        <span className="text-xs font-black min-w-[14px] sm:min-w-[16px] text-center">{item.quantity}</span>
                         <button
                           onClick={() => updatePosQty(item.id, 1)}
-                          className="w-6 h-6 rounded bg-orange-500 text-white flex items-center justify-center font-bold"
+                          className="w-5 h-5 sm:w-6 sm:h-6 rounded bg-orange-500 hover:bg-orange-600 active:scale-95 text-white flex items-center justify-center font-bold text-xs"
                         >
                           +
                         </button>
-                        <span className="text-xs font-black text-slate-900 min-w-[45px] text-right">
+                        <span className="text-xs font-black text-slate-900 min-w-[40px] sm:min-w-[45px] text-right">
                           ₹{item.price * item.quantity}
                         </span>
                       </div>
@@ -1998,27 +2074,27 @@ export default function OperatorConsole() {
               </div>
 
               {/* Walk-in Customer Label Input */}
-              <div className="pt-3 border-t border-slate-100">
+              <div className="pt-2 sm:pt-3 border-t border-slate-100">
                 <input
                   type="text"
                   placeholder="Customer Name / Token Note (Optional)"
                   value={posCustomerName}
                   onChange={(e) => setPosCustomerName(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none mb-3"
+                  className="w-full px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg sm:rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none mb-2 sm:mb-3"
                 />
 
                 {/* Total */}
-                <div className="flex items-center justify-between mb-3 text-slate-900">
-                  <span className="font-semibold text-sm">Bill Amount</span>
-                  <span className="text-2xl font-black">₹{posTotal}</span>
+                <div className="flex items-center justify-between mb-2 sm:mb-3 text-slate-900">
+                  <span className="font-semibold text-xs sm:text-sm text-slate-600">Bill Amount</span>
+                  <span className="text-xl sm:text-2xl font-black text-slate-900">₹{posTotal}</span>
                 </div>
 
                 {/* 4-Tap Payment Buttons */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2">
                   <button
                     disabled={posCart.length === 0 || posSubmitting}
                     onClick={() => submitPosOrder('CASH')}
-                    className="py-3 px-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 disabled:opacity-50 text-white font-black text-xs shadow-md shadow-emerald-600/20 transition-all flex flex-col items-center justify-center"
+                    className="py-2.5 sm:py-3 px-1.5 sm:px-2 rounded-xl sm:rounded-2xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 disabled:opacity-50 text-white font-black text-xs shadow-md shadow-emerald-600/20 transition-all flex flex-col items-center justify-center"
                   >
                     <span>💵 CASH</span>
                     <span className="text-[10px] font-normal opacity-90">Collect ₹{posTotal}</span>
@@ -2027,7 +2103,7 @@ export default function OperatorConsole() {
                   <button
                     disabled={posCart.length === 0 || posSubmitting}
                     onClick={() => submitPosOrder('UPI')}
-                    className="py-3 px-2 rounded-2xl bg-orange-500 hover:bg-orange-600 active:scale-95 disabled:opacity-50 text-white font-black text-xs shadow-md shadow-orange-500/20 transition-all flex flex-col items-center justify-center"
+                    className="py-2.5 sm:py-3 px-1.5 sm:px-2 rounded-xl sm:rounded-2xl bg-orange-500 hover:bg-orange-600 active:scale-95 disabled:opacity-50 text-white font-black text-xs shadow-md shadow-orange-500/20 transition-all flex flex-col items-center justify-center"
                   >
                     <span>⚡ UPI QR</span>
                     <span className="text-[10px] font-normal opacity-90">Paid ₹{posTotal}</span>
@@ -2040,7 +2116,7 @@ export default function OperatorConsole() {
                       setWalletCustomerSearch(initialSearch);
                       setShowWalletCustomerModal(true);
                     }}
-                    className="py-3 px-2 rounded-2xl bg-gradient-to-r from-teal-600 to-emerald-700 hover:from-teal-700 hover:to-emerald-800 active:scale-95 disabled:opacity-50 text-white font-black text-xs shadow-md shadow-teal-600/20 transition-all flex flex-col items-center justify-center"
+                    className="py-2.5 sm:py-3 px-1.5 sm:px-2 rounded-xl sm:rounded-2xl bg-gradient-to-r from-teal-600 to-emerald-700 hover:from-teal-700 hover:to-emerald-800 active:scale-95 disabled:opacity-50 text-white font-black text-xs shadow-md shadow-teal-600/20 transition-all flex flex-col items-center justify-center"
                   >
                     <span>👛 WALLET</span>
                     <span className="text-[10px] font-normal opacity-90">Debit ₹{posTotal}</span>
@@ -2061,7 +2137,7 @@ export default function OperatorConsole() {
                       setIsAddingNewCreditCustomer(false);
                       setShowCreditCustomerModal(true);
                     }}
-                    className="py-3 px-2 rounded-2xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 disabled:opacity-50 text-white font-black text-xs shadow-md shadow-indigo-600/20 transition-all flex flex-col items-center justify-center"
+                    className="py-2.5 sm:py-3 px-1.5 sm:px-2 rounded-xl sm:rounded-2xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 disabled:opacity-50 text-white font-black text-xs shadow-md shadow-indigo-600/20 transition-all flex flex-col items-center justify-center"
                   >
                     <span>📋 CREDIT</span>
                     <span className="text-[10px] font-normal opacity-90">Weekly Tab</span>
