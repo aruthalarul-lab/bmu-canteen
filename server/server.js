@@ -1388,6 +1388,56 @@ app.post('/api/wallet/topup', requireOperatorAuth, (req, res) => {
   });
 });
 
+// POST /api/wallet/activate - Public endpoint for customer to activate/register a prepaid wallet account
+app.post('/api/wallet/activate', (req, res) => {
+  const { customer_name, phone, department } = req.body;
+  const cleanName = (customer_name || '').trim();
+  const cleanPhone = (phone || '').trim();
+  const cleanDept = (department || '').trim();
+
+  if (!cleanName && !cleanPhone) {
+    return res.status(400).json({ error: 'Valid Name or Mobile Number is required to activate wallet' });
+  }
+
+  const finalName = cleanName || `Customer ${cleanPhone.slice(-4)}`;
+
+  // Find existing account by phone or name
+  let account = null;
+  if (cleanPhone) {
+    account = db.prepare("SELECT * FROM credit_accounts WHERE phone = ? AND phone != ''").get(cleanPhone);
+  }
+  if (!account && finalName) {
+    account = db.prepare('SELECT * FROM credit_accounts WHERE LOWER(customer_name) = LOWER(?)').get(finalName);
+  }
+
+  if (account) {
+    if (cleanPhone || cleanDept) {
+      db.prepare(`
+        UPDATE credit_accounts 
+        SET phone = CASE WHEN ? != '' THEN ? ELSE phone END,
+            department = CASE WHEN ? != '' THEN ? ELSE department END,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(cleanPhone, cleanPhone, cleanDept, cleanDept, account.id);
+      account = db.prepare('SELECT * FROM credit_accounts WHERE id = ?').get(account.id);
+    }
+  } else {
+    const resAcc = db.prepare(`
+      INSERT INTO credit_accounts (customer_name, department, phone, desk, balance, wallet_balance)
+      VALUES (?, ?, ?, ?, 0, 0)
+    `).run(finalName, cleanDept, cleanPhone, cleanDept);
+    account = db.prepare('SELECT * FROM credit_accounts WHERE id = ?').get(resAcc.lastInsertRowid);
+  }
+
+  io.emit('credit-updated', { customer_name: account.customer_name });
+
+  res.json({
+    success: true,
+    message: 'Prepaid Wallet Account Ready!',
+    account
+  });
+});
+
 // POST /api/wallet/customer-recharge - Customer online UPI recharge request (Option A: Instant Self-Credit / Option B: Pending Approval)
 app.post('/api/wallet/customer-recharge', (req, res) => {
   const { customer_name, phone, department, amount, utr, notes } = req.body;

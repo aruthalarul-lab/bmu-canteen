@@ -40,11 +40,65 @@ export default function CustomerCreditModal({ isOpen, onClose, initialTab = 'wal
   const [walletQrData, setWalletQrData] = useState(null);
   const [loadingWalletQr, setLoadingWalletQr] = useState(false);
 
+  // New Wallet Account Activation State
+  const [activateName, setActivateName] = useState('');
+  const [activatePhone, setActivatePhone] = useState('');
+  const [activateDept, setActivateDept] = useState('');
+  const [activatingWallet, setActivatingWallet] = useState(false);
+  const [showActivateForm, setShowActivateForm] = useState(false);
+
+  useEffect(() => {
+    const nums = (query || '').replace(/\D/g, '');
+    if (nums.length >= 4) {
+      setActivatePhone(nums);
+    } else if (!nums && query.trim()) {
+      setActivateName(query.trim());
+    }
+  }, [query]);
+
   useEffect(() => {
     if (initialTab) {
       setActiveMode(initialTab);
     }
   }, [initialTab, isOpen]);
+
+  const handleQuickActivateWallet = async (e) => {
+    if (e) e.preventDefault();
+    const name = activateName.trim() || (isNaN(query) ? query.trim() : '');
+    const phone = activatePhone.trim() || query.replace(/\D/g, '');
+    if (!name && !phone) {
+      alert('Please enter your Name or Mobile Number to activate your wallet.');
+      return;
+    }
+
+    setActivatingWallet(true);
+    try {
+      const res = await fetch('/api/wallet/activate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customer_name: name || `Customer ${phone.slice(-4)}`,
+          phone: phone,
+          department: activateDept.trim() || 'General'
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to activate wallet');
+
+      localStorage.setItem('bmu_customer_name', data.account.customer_name);
+      if (data.account.phone) localStorage.setItem('bmu_customer_phone', data.account.phone);
+
+      setError('');
+      setShowActivateForm(false);
+      await handleSearch(data.account.customer_name);
+      setShowWalletRecharge(true); // Open the top-up tray directly!
+    } catch (err) {
+      alert(err.message || 'Error activating wallet');
+    } finally {
+      setActivatingWallet(false);
+    }
+  };
 
   const handleSearch = async (searchVal) => {
     const term = (searchVal !== undefined ? searchVal : query).trim();
@@ -420,10 +474,80 @@ export default function CustomerCreditModal({ isOpen, onClose, initialTab = 'wal
               <span>{loading ? 'Searching...' : activeMode === 'wallet' ? 'Check Wallet' : 'Check Dues'}</span>
             </button>
           </form>
-          {error && (
+          {error && activeMode === 'credit' && (
             <div className="mt-2.5 flex items-center gap-1.5 text-xs text-rose-600 bg-rose-50 px-3 py-2 rounded-xl border border-rose-200 animate-fade-in">
               <AlertCircle className="w-4 h-4 shrink-0" />
               <span>{error}</span>
+            </div>
+          )}
+          {error && activeMode === 'wallet' && (
+            <div className="mt-3 p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-emerald-50 via-teal-50 to-emerald-50 border-2 border-emerald-400 shadow-sm animate-fade-in space-y-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold shadow-xs shrink-0">
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-sm text-slate-900">
+                    New Customer? Activate Wallet in 5 Seconds!
+                  </h3>
+                  <p className="text-xs text-slate-600">
+                    No account exists yet for "{query}". Enter your name to activate your BMU Prepaid Wallet and top up immediately.
+                  </p>
+                </div>
+              </div>
+
+              <form onSubmit={handleQuickActivateWallet} className="space-y-3 pt-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Your Full Name <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Arul"
+                      value={activateName}
+                      onChange={(e) => setActivateName(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold focus:ring-2 focus:ring-emerald-500 bg-white shadow-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Mobile Number <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="tel"
+                      required
+                      maxLength="10"
+                      placeholder="e.g. 9551713380"
+                      value={activatePhone}
+                      onChange={(e) => setActivatePhone(e.target.value.replace(/\D/g, ''))}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-mono font-semibold focus:ring-2 focus:ring-emerald-500 bg-white shadow-xs"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Department / Student ID (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Electricity, CSE, Staff"
+                    value={activateDept}
+                    onChange={(e) => setActivateDept(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-emerald-500 bg-white shadow-xs"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={activatingWallet}
+                  className="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 active:scale-95 text-white font-extrabold text-xs shadow-md shadow-emerald-600/25 transition-all flex items-center justify-center gap-1.5"
+                >
+                  {activatingWallet ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <PlusCircle className="w-3.5 h-3.5" />}
+                  <span>{activatingWallet ? 'Activating Wallet...' : '⚡ Activate Wallet & Open Top-Up'}</span>
+                </button>
+              </form>
             </div>
           )}
         </div>
@@ -1010,7 +1134,7 @@ export default function CustomerCreditModal({ isOpen, onClose, initialTab = 'wal
 
           {/* Initial Blank State */}
           {!accountData && !loading && (
-            <div className="text-center py-10 px-4 space-y-3">
+            <div className="text-center py-8 px-4 space-y-4">
               <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto shadow-sm">
                 {activeMode === 'wallet' ? <Wallet className="w-6 h-6" /> : <Receipt className="w-6 h-6" />}
               </div>
@@ -1024,6 +1148,102 @@ export default function CustomerCreditModal({ isOpen, onClose, initialTab = 'wal
                     : 'Enter your registered 10-digit mobile number or staff name to view your statement and clear outstanding dues.'}
                 </p>
               </div>
+
+              {activeMode === 'wallet' && !showActivateForm && (
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowActivateForm(true);
+                      setError('');
+                    }}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-xs font-bold shadow-md shadow-emerald-600/20 hover:from-emerald-700 hover:to-teal-700 active:scale-95 transition-all"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>⚡ New Customer? Activate / Top-Up Wallet</span>
+                  </button>
+                </div>
+              )}
+
+              {activeMode === 'wallet' && showActivateForm && (
+                <div className="max-w-md mx-auto p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-emerald-50 via-teal-50 to-emerald-50 border-2 border-emerald-400 shadow-sm animate-fade-in space-y-3 text-left">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold shadow-xs shrink-0">
+                        <Sparkles className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h3 className="font-extrabold text-sm text-slate-900">
+                          Activate BMU Prepaid Wallet
+                        </h3>
+                        <p className="text-[11px] text-slate-600">
+                          Takes 5 seconds. Top up immediately via UPI QR!
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowActivateForm(false)}
+                      className="text-xs text-slate-400 hover:text-slate-600 font-bold"
+                    >
+                      ✕ Cancel
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleQuickActivateWallet} className="space-y-3 pt-1">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          Your Full Name <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. Arul"
+                          value={activateName}
+                          onChange={(e) => setActivateName(e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold focus:ring-2 focus:ring-emerald-500 bg-white shadow-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          Mobile Number <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="tel"
+                          required
+                          maxLength="10"
+                          placeholder="e.g. 9551713380"
+                          value={activatePhone}
+                          onChange={(e) => setActivatePhone(e.target.value.replace(/\D/g, ''))}
+                          className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-mono font-semibold focus:ring-2 focus:ring-emerald-500 bg-white shadow-xs"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        Department / Student ID (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Electricity, CSE, Staff"
+                        value={activateDept}
+                        onChange={(e) => setActivateDept(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-emerald-500 bg-white shadow-xs"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={activatingWallet}
+                      className="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 active:scale-95 text-white font-extrabold text-xs shadow-md shadow-emerald-600/25 transition-all flex items-center justify-center gap-1.5"
+                    >
+                      {activatingWallet ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <PlusCircle className="w-3.5 h-3.5" />}
+                      <span>{activatingWallet ? 'Activating Wallet...' : '⚡ Activate Wallet & Open Top-Up'}</span>
+                    </button>
+                  </form>
+                </div>
+              )}
             </div>
           )}
         </div>
