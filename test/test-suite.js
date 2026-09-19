@@ -43,7 +43,7 @@ async function runTests() {
   if (fs.existsSync(TEST_DB + '-shm')) try { fs.unlinkSync(TEST_DB + '-shm'); } catch {}
 
   console.log('\n--- Suite 2: Starting Server on Isolated Port 5099 with Isolated DB ---');
-  const serverProcess = spawn('node', ['server/server.js'], {
+  const serverProcess = spawn(process.execPath, ['server/server.js'], {
     env: { ...process.env, PORT: TEST_PORT, DB_PATH: TEST_DB },
     cwd: path.join(__dirname, '..')
   });
@@ -231,6 +231,14 @@ async function runTests() {
 
     const toggleWithAuth = await request('PATCH', `/api/menu/${createdItemId}/toggle-stock`, {}, { 'x-operator-pin': TEST_PIN });
     assert(toggleWithAuth.status === 200, 'PATCH /api/menu/:id/toggle-stock accepted with 200 with PIN header');
+
+    // 4b. PATCH /api/menu/:id/toggle-special
+    const toggleSpecialNoAuth = await request('PATCH', `/api/menu/${createdItemId}/toggle-special`);
+    assert(toggleSpecialNoAuth.status === 401, 'PATCH /api/menu/:id/toggle-special rejected with 401 without PIN header');
+
+    const toggleSpecialWithAuth = await request('PATCH', `/api/menu/${createdItemId}/toggle-special`, {}, { 'x-operator-pin': TEST_PIN });
+    assert(toggleSpecialWithAuth.status === 200 && toggleSpecialWithAuth.body.is_quick_item !== undefined, 
+      'PATCH /api/menu/:id/toggle-special accepted with 200 with PIN header');
 
     // 5. DELETE /api/menu/:id
     const deleteNoAuth = await request('DELETE', `/api/menu/${createdItemId}`);
@@ -495,6 +503,95 @@ async function runTests() {
     const ledgerAfterCancel = await request('GET', `/api/credit/accounts/${encodeURIComponent('Dr. Ramesh Cancel')}`);
     assert(ledgerAfterCancel.status === 200 && ledgerAfterCancel.body.orders[0].status === 'CANCELLED' && ledgerAfterCancel.body.orders[0].payment_status === 'CANCELLED',
       'Customer ledger statement reports order status CANCELLED and payment_status CANCELLED');
+
+    // ==========================================
+    // SUITE 13: PREPAID CANTEEN WALLET OPERATIONS
+    // ==========================================
+    console.log('\n--- SUITE 13: Prepaid Canteen Wallet Operations ---');
+
+    // 1. Operator counter instant top-up (Cash)
+    const counterTopupRes = await request('POST', '/api/wallet/topup', {
+      customer_name: 'Priya Wallet',
+      phone: '9988112233',
+      department: 'ECE Dept',
+      amount: 500,
+      payment_method: 'CASH',
+      notes: 'Counter Cash Top-Up'
+    }, { 'x-operator-pin': TEST_PIN });
+    assert(counterTopupRes.status === 200 && counterTopupRes.body.new_wallet_balance === 500,
+      'Operator can instantly credit wallet balance at counter with Cash');
+
+    // 2. Customer online UPI recharge request (Option B: PENDING status)
+    const onlineRechargeRes = await request('POST', '/api/wallet/customer-recharge', {
+      customer_name: 'Priya Wallet',
+      phone: '9988112233',
+      department: 'ECE Dept',
+      amount: 300,
+      utr: 'UTR9988776655',
+      notes: 'Online GPay Recharge'
+    });
+    assert(onlineRechargeRes.status === 200 && onlineRechargeRes.body.status === 'PENDING',
+      'Customer online UPI recharge recorded as PENDING awaiting cashier verification (Option B)');
+    const rechargeId = onlineRechargeRes.body.transaction_id;
+
+    // 3. Balance before cashier verification remains unchanged (500)
+    const passbookBeforeVerify = await request('GET', `/api/wallet/passbook/${encodeURIComponent('Priya Wallet')}`);
+    assert(passbookBeforeVerify.status === 200 && passbookBeforeVerify.body.account.wallet_balance === 500,
+      'Prepaid wallet balance is not credited before cashier confirms receipt');
+
+    // 4. Operator views pending wallet recharges
+    const pendingRechargesRes = await request('GET', '/api/wallet/pending-recharges', null, { 'x-operator-pin': TEST_PIN });
+    assert(pendingRechargesRes.status === 200 && pendingRechargesRes.body.some(r => r.id === rechargeId && r.status === 'PENDING'),
+      'Operator can list pending wallet top-ups with customer UTR');
+
+    // 5. Operator confirms receipt of UPI recharge
+    const verifyRechargeRes = await request('POST', `/api/wallet/recharges/${rechargeId}/verify`, {}, { 'x-operator-pin': TEST_PIN });
+    assert(verifyRechargeRes.status === 200 && verifyRechargeRes.body.new_wallet_balance === 800,
+      'Cashier verification credits wallet balance (500 + 300 = 800)');
+
+    // 6. Insufficient balance check: Try to place order exceeding 800
+    const overspendRes = await request('POST', '/api/orders', {
+      customer_name: 'Priya Wallet',
+      customer_desk: 'Room 204',
+      customer_phone: '9988112233',
+      order_type: 'ONLINE',
+      payment_method: 'WALLET',
+      items: [{ menu_item_id: 1, quantity: 15 }] // 15 * 60 = 900 > 800
+    });
+    assert(overspendRes.status === 400 && overspendRes.body.shortage > 0,
+      'Wallet checkout rejected with shortage calculation when balance is insufficient');
+
+    // 7. Successful wallet checkout: 2 * Masala Dosa (120)
+    const walletOrderRes = await request('POST', '/api/orders', {
+      customer_name: 'Priya Wallet',
+      customer_desk: 'Room 204',
+      customer_phone: '9988112233',
+      order_type: 'ONLINE',
+      payment_method: 'WALLET',
+      items: [{ menu_item_id: 1, quantity: 2 }] // 2 * 60 = 120
+    });
+    assert(walletOrderRes.status === 201 && walletOrderRes.body.payment_status === 'PAID',
+      'Wallet checkout creates order immediately with payment_status PAID');
+    const walletOrderId = walletOrderRes.body.id;
+
+    // 8. Verify wallet balance deducted (800 - 120 = 680)
+    const passbookAfterOrder = await request('GET', `/api/wallet/passbook/${encodeURIComponent('Priya Wallet')}`);
+    assert(passbookAfterOrder.status === 200 && passbookAfterOrder.body.account.wallet_balance === 680,
+      'Wallet balance atomically deducted after checkout (800 - 120 = 680)');
+
+    // 9. Cancellation refund: Operator cancels the wallet order
+    const cancelWalletOrderRes = await request('PATCH', `/api/orders/${walletOrderId}/status`, {
+      status: 'CANCELLED'
+    }, { 'x-operator-pin': TEST_PIN });
+    assert(cancelWalletOrderRes.status === 200 && cancelWalletOrderRes.body.status === 'CANCELLED',
+      'Operator can cancel wallet order');
+
+    // 10. Verify wallet balance restored to 800 with REFUND transaction in passbook
+    const passbookAfterRefund = await request('GET', `/api/wallet/passbook/${encodeURIComponent('Priya Wallet')}`);
+    assert(passbookAfterRefund.status === 200 && passbookAfterRefund.body.account.wallet_balance === 800,
+      'Cancelled wallet order automatically refunded back to wallet (680 + 120 = 800)');
+    assert(passbookAfterRefund.body.transactions.some(t => t.type === 'REFUND' && t.amount === 120),
+      'Wallet passbook logs REFUND transaction with order details');
 
   } finally {
     serverProcess.kill();

@@ -2,13 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { 
   Search, Plus, Minus, ShoppingBag, Clock, CheckCircle2, 
   Sparkles, AlertCircle, ArrowRight, X, Phone, User, MapPin,
-  RefreshCw, Check, CreditCard, LayoutGrid, List, AlignJustify, Utensils
+  RefreshCw, Check, CreditCard, LayoutGrid, List, AlignJustify, Utensils,
+  Flame, Star, Wallet, Zap
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { playOrderReadySound } from '../utils/audio';
 import UpiModal from '../components/UpiModal';
 import UpiPaymentButtons from '../components/UpiPaymentButtons';
 import CustomerCreditModal from '../components/CustomerCreditModal';
+import WhatsAppIcon from '../components/WhatsAppIcon';
+import { shareSpecialsWhatsApp } from '../utils/whatsapp';
 import socket from '../services/socket';
 
 export default function CustomerMenu({ 
@@ -52,13 +55,53 @@ export default function CustomerMenu({
   const [customerDesk, setCustomerDesk] = useState(() => localStorage.getItem('bmu_customer_desk') || '');
   const [customerPhone, setCustomerPhone] = useState(() => localStorage.getItem('bmu_customer_phone') || '');
   const [customerUtr, setCustomerUtr] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('UPI'); // 'UPI', 'CREDIT', 'CASH'
+  const [paymentMethod, setPaymentMethod] = useState('UPI'); // 'UPI', 'WALLET', 'CREDIT', 'CASH'
   const [submittingOrder, setSubmittingOrder] = useState(false);
   const [showUpiModal, setShowUpiModal] = useState(false);
   const [completedNotice, setCompletedNotice] = useState(null);
   const [upiPreview, setUpiPreview] = useState(null);
   const [loadingUpiPreview, setLoadingUpiPreview] = useState(false);
   const [showCreditModal, setShowCreditModal] = useState(false);
+  const [creditModalTab, setCreditModalTab] = useState('wallet');
+  const [userWalletBalance, setUserWalletBalance] = useState(0);
+  const [fetchingWallet, setFetchingWallet] = useState(false);
+
+  const fetchCustomerWallet = async (termOverride) => {
+    const queryTerm = (termOverride || customerPhone || customerName || '').trim();
+    if (!queryTerm) return;
+    setFetchingWallet(true);
+    try {
+      const res = await fetch('/api/credit/lookup?query=' + encodeURIComponent(queryTerm));
+      if (res.ok) {
+        const data = await res.json();
+        if (data.matchType === 'exact') {
+          setUserWalletBalance(data.wallet_balance || data.account?.wallet_balance || 0);
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch wallet', e);
+    } finally {
+      setFetchingWallet(false);
+    }
+  };
+
+  useEffect(() => {
+    const term = customerPhone || customerName;
+    if (term) {
+      fetchCustomerWallet(term);
+    }
+  }, [customerName, customerPhone]);
+
+  useEffect(() => {
+    const handleWalletUpdated = (data) => {
+      const currName = customerName.trim().toLowerCase();
+      if (!data?.customer_name || data.customer_name.toLowerCase() === currName) {
+        fetchCustomerWallet();
+      }
+    };
+    socket.on('wallet-updated', handleWalletUpdated);
+    return () => socket.off('wallet-updated', handleWalletUpdated);
+  }, [customerName, customerPhone]);
 
   // Fetch menu on load
   const fetchMenu = async () => {
@@ -166,8 +209,23 @@ export default function CustomerMenu({
       if (bStock !== aStock) {
         return bStock - aStock; // 1 (in-stock) comes before 0 (sold out)
       }
+      // Today's special items prioritized:
+      const aQuick = a.is_quick_item === 1 ? 1 : 0;
+      const bQuick = b.is_quick_item === 1 ? 1 : 0;
+      if (bQuick !== aQuick) {
+        return bQuick - aQuick;
+      }
       return 0;
     });
+
+  // Today's Specials / Quick Picks (Available items marked as quick items)
+  const specialItems = safeItems.filter(item => {
+    if (item.is_quick_item !== 1) return false;
+    if (item.is_available !== 1) return false;
+    if (dietFilter === 'VEG' && item.is_veg !== 1) return false;
+    if (dietFilter === 'NON_VEG' && item.is_veg === 1) return false;
+    return true;
+  });
 
   // Fetch UPI preview QR when drawer is open and UPI is selected
   useEffect(() => {
@@ -212,6 +270,14 @@ export default function CustomerMenu({
       const cleanPhone = customerPhone.trim().replace(/\D/g, '');
       if (cleanPhone.length < 10) {
         alert('📞 Mobile number (minimum 10 digits) is mandatory for Staff Credit (Weekly Tab).');
+        return;
+      }
+    }
+
+    // 4. For Prepaid Wallet, ensure sufficient balance
+    if (paymentMethod === 'WALLET') {
+      if (userWalletBalance < cartSubtotal) {
+        alert(`⚠️ Insufficient Wallet Balance! You need ₹${cartSubtotal} but have ₹${userWalletBalance}. Please top-up your wallet.`);
         return;
       }
     }
@@ -316,12 +382,16 @@ export default function CustomerMenu({
               <div>
                 <div className="flex items-center space-x-2">
                   <span className="font-bold text-base">
-                    {activeOrder.payment_method === 'CASH' && activeOrder.payment_status === 'PENDING'
+                    {activeOrder.payment_method === 'WALLET'
+                      ? '👛 Paid via BMU Wallet'
+                      : activeOrder.payment_method === 'CASH' && activeOrder.payment_status === 'PENDING'
                       ? '💵 Pay Cash at Counter 1'
                       : 'Your Order is in Progress'}
                   </span>
                   <span className={`px-2 py-0.5 rounded-full text-xs font-extrabold uppercase tracking-wide ${
-                    activeOrder.payment_method === 'CASH' && activeOrder.payment_status === 'PENDING'
+                    activeOrder.payment_method === 'WALLET'
+                      ? 'bg-emerald-300 text-slate-900 font-black'
+                      : activeOrder.payment_method === 'CASH' && activeOrder.payment_status === 'PENDING'
                       ? 'bg-amber-300 text-slate-900 animate-pulse'
                       : activeOrder.status === 'READY' 
                       ? 'bg-emerald-400 text-slate-900 animate-ready-glow' 
@@ -329,7 +399,9 @@ export default function CustomerMenu({
                       ? 'bg-amber-300 text-slate-900'
                       : 'bg-white/20 text-white'
                   }`}>
-                    {activeOrder.payment_method === 'CASH' && activeOrder.payment_status === 'PENDING'
+                    {activeOrder.payment_method === 'WALLET'
+                      ? '⚡ WALLET PAID'
+                      : activeOrder.payment_method === 'CASH' && activeOrder.payment_status === 'PENDING'
                       ? '⏳ AWAITING CASH'
                       : activeOrder.status === 'READY' 
                       ? '🎉 READY FOR PICKUP!' 
@@ -388,20 +460,155 @@ export default function CustomerMenu({
             </p>
             <div className="mt-4 pt-3.5 border-t border-slate-700/60 flex flex-wrap items-center justify-between gap-2">
               <span className="text-xs text-slate-300">
-                Staff / Faculty Credit Account Holder?
+                Digital Accounts & Fast Checkout:
               </span>
-              <button
-                type="button"
-                onClick={() => setShowCreditModal(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-orange-500/20 hover:bg-orange-500/30 text-orange-300 border border-orange-500/40 text-xs font-bold transition-all active:scale-95 shadow-xs"
-              >
-                <CreditCard className="w-3.5 h-3.5" />
-                <span>Check My Credit Dues & Pay Online</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCreditModalTab('wallet');
+                    setShowCreditModal(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition-all active:scale-95 shadow-xs"
+                >
+                  <Wallet className="w-3.5 h-3.5" />
+                  <span>👛 Prepaid Wallet ({userWalletBalance > 0 ? `₹${userWalletBalance}` : 'Top-Up'})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCreditModalTab('credit');
+                    setShowCreditModal(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-orange-500/20 hover:bg-orange-500/30 text-orange-300 border border-orange-500/40 text-xs font-bold transition-all active:scale-95 shadow-xs"
+                >
+                  <CreditCard className="w-3.5 h-3.5" />
+                  <span>Credit Dues</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
+
+        {/* ================= TODAY'S SPECIALS & QUICK PICKS ================= */}
+        {specialItems.length > 0 && (
+          <div className="mb-6 bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/10 border border-orange-200/80 rounded-3xl p-4 sm:p-5 shadow-xs">
+            <div className="flex items-center justify-between mb-3.5">
+              <div className="flex items-center space-x-2">
+                <span className="flex items-center justify-center w-8 h-8 rounded-2xl bg-orange-500 text-white shadow-sm">
+                  <Flame className="w-4 h-4 fill-white" />
+                </span>
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
+                      Today's Specials
+                    </h2>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide bg-orange-500 text-white shadow-xs">
+                      Fast Picks
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    Chef's fresh highlights • 1-tap quick add without searching
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-2 shrink-0">
+                <button
+                  onClick={() => shareSpecialsWhatsApp({ 
+                    specials: specialItems, 
+                    canteenName: 'BMU Canteen' 
+                  })}
+                  className="flex items-center space-x-1 px-2.5 py-1 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white text-xs font-bold shadow-xs transition-all"
+                  title="Share Today's Specials to WhatsApp"
+                >
+                  <WhatsAppIcon className="w-3.5 h-3.5 fill-white" />
+                  <span className="hidden sm:inline">Share</span>
+                </button>
+                <span className="text-xs font-bold text-orange-700 bg-white border border-orange-200 px-2.5 py-1 rounded-xl shadow-2xs">
+                  {specialItems.length} Featured
+                </span>
+              </div>
+            </div>
+
+            {/* Horizontal Scroll Shelf */}
+            <div className="flex space-x-3 overflow-x-auto pb-3 pt-1 custom-scrollbar-orange -mx-2 px-2 sm:mx-0 sm:px-0">
+              {specialItems.map(item => {
+                const inCart = safeCart.find(c => c.id === item.id);
+                return (
+                  <div
+                    key={item.id}
+                    className="shrink-0 w-48 sm:w-56 bg-white rounded-2xl border border-orange-200 hover:border-orange-400 p-3.5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between group"
+                  >
+                    <div>
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="w-12 h-12 rounded-xl bg-orange-50 border border-orange-100 flex items-center justify-center text-2xl select-none group-hover:scale-105 transition-transform shadow-inner">
+                          {item.image_emoji || '🍲'}
+                        </div>
+                        <div className="flex items-center space-x-1.5">
+                          {item.is_veg === 1 ? (
+                            <span className="w-3.5 h-3.5 rounded-sm border border-emerald-600 bg-white flex items-center justify-center p-0.5 shadow-xs" title="Pure Veg">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                            </span>
+                          ) : (
+                            <span className="w-3.5 h-3.5 rounded-sm border border-rose-600 bg-white flex items-center justify-center p-0.5 shadow-xs" title="Non-Veg">
+                              <span className="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
+                            </span>
+                          )}
+                          <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded-md flex items-center gap-0.5">
+                            <Star className="w-2.5 h-2.5 fill-amber-500 text-amber-500" />
+                            Special
+                          </span>
+                        </div>
+                      </div>
+
+                      <h3 className="font-extrabold text-sm text-slate-900 line-clamp-1 leading-snug">
+                        {item.name}
+                      </h3>
+                      <p className="text-[11px] text-slate-400 line-clamp-1 mt-0.5">
+                        {item.description || item.category_name}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-3 mt-2 border-t border-slate-100">
+                      <span className="font-black text-base text-slate-900">
+                        ₹{item.price}
+                      </span>
+
+                      {inCart ? (
+                        <div className="flex items-center space-x-1 bg-orange-50 border border-orange-300 rounded-xl p-0.5 shadow-xs">
+                          <button
+                            onClick={() => updateQuantity(item.id, inCart.quantity - 1)}
+                            className="w-6 h-6 rounded-lg bg-white text-orange-600 shadow-xs flex items-center justify-center hover:bg-orange-100 transition-colors"
+                          >
+                            <Minus className="w-3 h-3" />
+                          </button>
+                          <span className="font-bold text-xs text-slate-900 min-w-[16px] text-center">
+                            {inCart.quantity}
+                          </span>
+                          <button
+                            onClick={() => updateQuantity(item.id, inCart.quantity + 1)}
+                            className="w-6 h-6 rounded-lg bg-white text-orange-600 shadow-xs flex items-center justify-center hover:bg-orange-100 transition-colors"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => addToCart(item)}
+                          className="flex items-center space-x-1 bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold shadow-sm transition-all active:scale-95"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Add</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Search & Veg Filter */}
         <div className="flex flex-col sm:flex-row gap-3 mb-6">
@@ -613,6 +820,12 @@ export default function CustomerMenu({
                       <h3 className="font-bold text-slate-900 text-sm sm:text-base truncate">
                         {item.name}
                       </h3>
+                      {item.is_quick_item === 1 && isAvailable && (
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase bg-amber-100 text-amber-800 border border-amber-300 shrink-0 flex items-center gap-0.5">
+                          <Star className="w-2.5 h-2.5 fill-amber-500 text-amber-500" />
+                          Special
+                        </span>
+                      )}
                       {!isAvailable && (
                         <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase bg-rose-100 text-rose-700 border border-rose-200 shrink-0">
                           Sold Out
@@ -706,6 +919,12 @@ export default function CustomerMenu({
                         {item.category_name}
                       </span>
                     </div>
+                    {item.is_quick_item === 1 && isAvailable && (
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase bg-amber-100 text-amber-800 border border-amber-300 shrink-0 flex items-center gap-0.5">
+                        <Star className="w-2.5 h-2.5 fill-amber-500 text-amber-500" />
+                        Special
+                      </span>
+                    )}
                     {!isAvailable && (
                       <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase bg-rose-100 text-rose-700 border border-rose-200 shrink-0">
                         Sold Out
@@ -780,6 +999,12 @@ export default function CustomerMenu({
                         ) : (
                           <span className="w-3.5 h-3.5 rounded-sm border border-rose-600 bg-white flex items-center justify-center p-0.5 shrink-0" title="Non-Veg">
                             <span className="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
+                          </span>
+                        )}
+                        {item.is_quick_item === 1 && isAvailable && (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-0.5">
+                            <Star className="w-2.5 h-2.5 fill-amber-500 text-amber-500" />
+                            Special
                           </span>
                         )}
                         {!isAvailable && (
@@ -1004,7 +1229,7 @@ export default function CustomerMenu({
                       <label className="text-xs font-bold text-slate-700 block mb-1.5">
                         Payment Method <span className="text-red-500">*</span>
                       </label>
-                      <div className="grid grid-cols-3 gap-2">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                         <button
                           type="button"
                           onClick={() => setPaymentMethod('UPI')}
@@ -1020,15 +1245,20 @@ export default function CustomerMenu({
 
                         <button
                           type="button"
-                          onClick={() => setPaymentMethod('CREDIT')}
+                          onClick={() => {
+                            setPaymentMethod('WALLET');
+                            fetchCustomerWallet();
+                          }}
                           className={`p-2.5 rounded-xl border text-xs font-bold flex flex-col items-center justify-center transition-all ${
-                            paymentMethod === 'CREDIT'
-                              ? 'bg-indigo-50 border-indigo-400 text-indigo-700 ring-1 ring-indigo-400 shadow-sm'
+                            paymentMethod === 'WALLET'
+                              ? 'bg-emerald-50 border-emerald-400 text-emerald-700 ring-1 ring-emerald-400 shadow-sm'
                               : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
                           }`}
                         >
-                          <span>📋 Staff Credit</span>
-                          <span className="text-[10px] font-normal text-slate-500 mt-0.5">Weekly Tab</span>
+                          <span>👛 BMU Wallet</span>
+                          <span className="text-[10px] font-bold text-emerald-600 mt-0.5">
+                            {userWalletBalance > 0 ? `₹${userWalletBalance}` : '1-Tap Pay'}
+                          </span>
                         </button>
 
                         <button
@@ -1043,7 +1273,81 @@ export default function CustomerMenu({
                           <span>💵 Cash</span>
                           <span className="text-[10px] font-normal text-slate-500 mt-0.5">Counter 1</span>
                         </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setPaymentMethod('CREDIT')}
+                          className={`p-2.5 rounded-xl border text-xs font-bold flex flex-col items-center justify-center transition-all ${
+                            paymentMethod === 'CREDIT'
+                              ? 'bg-indigo-50 border-indigo-400 text-indigo-700 ring-1 ring-indigo-400 shadow-sm'
+                              : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                          }`}
+                        >
+                          <span>📋 Staff Credit</span>
+                          <span className="text-[10px] font-normal text-slate-500 mt-0.5">Weekly Tab</span>
+                        </button>
                       </div>
+
+                      {/* Wallet Balance & Instant Checkout Card */}
+                      {paymentMethod === 'WALLET' && (
+                        <div className="mt-3 p-3.5 rounded-2xl bg-emerald-50/90 border border-emerald-200 text-xs text-emerald-950 space-y-2.5 animate-fade-in">
+                          <div className="flex items-center justify-between">
+                            <div className="font-bold flex items-center gap-1.5 text-emerald-900">
+                              <Wallet className="w-4 h-4 text-emerald-600 shrink-0" />
+                              <span>BMU Canteen - Prepaid Wallet Checkout</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCreditModalTab('wallet');
+                                setShowCreditModal(true);
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] shadow-xs active:scale-95 transition-all"
+                            >
+                              + Top-Up
+                            </button>
+                          </div>
+
+                          <div className="bg-white p-3 rounded-xl border border-emerald-200/80 flex items-center justify-between">
+                            <div>
+                              <p className="text-[11px] text-slate-500 font-medium">Available Balance</p>
+                              <p className="font-mono font-black text-lg text-emerald-700">₹{userWalletBalance}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-[11px] text-slate-500 font-medium">Order Amount</p>
+                              <p className="font-mono font-black text-lg text-slate-900">₹{cartSubtotal}</p>
+                            </div>
+                          </div>
+
+                          {userWalletBalance >= cartSubtotal ? (
+                            <div className="flex items-center gap-1.5 text-emerald-800 font-semibold text-[11px] bg-emerald-100/60 p-2 rounded-xl border border-emerald-200">
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                              <span>Sufficient balance! 1-Tap instant food order placement.</span>
+                            </div>
+                          ) : (
+                            <div className="space-y-1.5 bg-amber-50 p-2.5 rounded-xl border border-amber-200 text-amber-900">
+                              <div className="flex items-center justify-between font-bold text-xs">
+                                <span>⚠️ Insufficient Balance</span>
+                                <span className="font-mono text-rose-700">Shortage: ₹{cartSubtotal - userWalletBalance}</span>
+                              </div>
+                              <p className="text-[11px] text-amber-800">
+                                Please top-up at least ₹{cartSubtotal - userWalletBalance} to place this order using your prepaid wallet.
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setCreditModalTab('wallet');
+                                  setShowCreditModal(true);
+                                }}
+                                className="w-full mt-1 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-1 transition-all"
+                              >
+                                <Zap className="w-3.5 h-3.5" />
+                                <span>Top-Up Wallet via UPI Now</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       {/* UPI QR Payment Block (Pay Before Submitting) */}
                       {paymentMethod === 'UPI' && (
@@ -1163,6 +1467,36 @@ export default function CustomerMenu({
                     <span className="text-xl font-extrabold text-slate-900">₹{cartSubtotal}</span>
                   </div>
 
+                  {paymentMethod === 'WALLET' && (
+                    <button
+                      onClick={handlePlaceOrder}
+                      disabled={
+                        submittingOrder ||
+                        !customerName.trim() ||
+                        !customerDesk.trim() ||
+                        userWalletBalance < cartSubtotal
+                      }
+                      className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-800 active:scale-98 disabled:opacity-50 text-white font-extrabold text-sm shadow-lg shadow-emerald-600/25 transition-all flex items-center justify-center space-x-2"
+                    >
+                      {submittingOrder ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          <span>Deducting from Wallet...</span>
+                        </>
+                      ) : userWalletBalance < cartSubtotal ? (
+                        <>
+                          <AlertCircle className="w-4 h-4 text-amber-300" />
+                          <span>Insufficient Balance (Need ₹{cartSubtotal - userWalletBalance} more)</span>
+                        </>
+                      ) : (
+                        <>
+                          <Wallet className="w-4 h-4" />
+                          <span>⚡ 1-Tap Pay ₹{cartSubtotal} from Wallet</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+
                   {paymentMethod === 'UPI' && (
                     <button
                       onClick={handlePlaceOrder}
@@ -1243,6 +1577,7 @@ export default function CustomerMenu({
       <CustomerCreditModal
         isOpen={showCreditModal}
         onClose={() => setShowCreditModal(false)}
+        initialTab={creditModalTab}
       />
     </div>
   );

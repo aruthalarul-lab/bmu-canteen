@@ -6,6 +6,7 @@ mingit/
 # SQLite dynamic files
 canteen.db-shm
 canteen.db-wal
+db_backup/
 
 # Logs
 *.log

@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Utensils, Monitor, LayoutDashboard, ShoppingBag, Radio, QrCode, X, Copy, Check, CreditCard } from 'lucide-react';
+import { Utensils, Monitor, LayoutDashboard, ShoppingBag, Radio, QrCode, X, Copy, Check, CreditCard, Wallet } from 'lucide-react';
 import CustomerCreditModal from './CustomerCreditModal';
 
 export default function Navbar({ currentView, setView, cartCount, setIsCartOpen, isConnected }) {
   const [showQrModal, setShowQrModal] = useState(false);
   const [showCreditModal, setShowCreditModal] = useState(false);
+  const [creditModalTab, setCreditModalTab] = useState('wallet');
   const [copied, setCopied] = useState(false);
 
   const handleCopyLink = () => {
@@ -23,55 +24,45 @@ export default function Navbar({ currentView, setView, cartCount, setIsCartOpen,
               className="flex items-center space-x-2 sm:space-x-3 cursor-pointer shrink-0 min-w-0" 
               onClick={() => setView('customer')}
             >
-              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-orange-600 to-amber-500 flex items-center justify-center text-white shadow-md shadow-orange-500/20 shrink-0">
-                <Utensils className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.5]" />
+              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-orange-600 to-amber-500 flex items-center justify-center shadow-md shadow-orange-500/20 text-white shrink-0">
+                <Utensils className="w-4 h-4 sm:w-5 sm:h-5" />
               </div>
-              <div className="min-w-0">
-                <div className="flex items-center space-x-1.5 sm:space-x-2">
-                  <span className="font-extrabold text-base sm:text-lg tracking-tight text-slate-900 truncate">
-                    BMU Canteen
-                  </span>
-                  <span className="hidden lg:inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-orange-100 text-orange-800 shrink-0">
-                    Campus QuickBite
-                  </span>
-                  <span 
-                    className={`w-2 h-2 rounded-full sm:hidden shrink-0 ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}
-                    title={isConnected ? 'Live Connected' : 'Offline'}
-                  />
-                </div>
-                <div className="hidden sm:flex items-center space-x-1.5 text-xs text-slate-500">
-                  <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></span>
-                  <span>{isConnected ? 'Live Connected' : 'Offline'}</span>
-                </div>
+              <div className="flex flex-col min-w-0">
+                <span className="font-black text-sm sm:text-lg tracking-tight text-slate-900 leading-tight truncate">
+                  BMU Canteen
+                </span>
+                <span className="text-[10px] text-slate-500 font-medium truncate hidden min-[360px]:inline">
+                  Smart Digital Food Court
+                </span>
               </div>
             </div>
 
-            {/* Right Header Navigation & Actions */}
-            <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
-              <nav className="flex items-center space-x-0.5 sm:space-x-1.5 bg-slate-100 p-0.5 sm:p-1 rounded-xl border border-slate-200/80 text-xs sm:text-sm font-medium shrink-0">
+            {/* View Switcher & Action Buttons */}
+            <div className="flex items-center space-x-1 sm:space-x-2 shrink-0">
+              <nav className="flex items-center space-x-1 bg-slate-100/80 p-1 rounded-xl border border-slate-200/80">
+                {/* Menu Tab */}
                 <button
                   onClick={() => setView('customer')}
-                  className={`flex items-center space-x-1 px-2.5 py-1.5 sm:px-3 sm:py-1.5 rounded-lg transition-all ${
+                  className={`flex items-center space-x-1 px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all ${
                     currentView === 'customer'
-                      ? 'bg-white text-orange-600 font-bold shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                      ? 'bg-white text-orange-600 shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
                   }`}
-                  title="Menu"
                 >
-                  <Utensils className="w-4 h-4 shrink-0" />
-                  <span className="text-xs sm:text-sm font-bold">Menu</span>
+                  <Utensils className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                  <span>Menu</span>
                 </button>
 
+                {/* Live TV Token Board */}
                 <button
                   onClick={() => setView('display')}
-                  className={`flex items-center space-x-1 p-1.5 sm:px-3 sm:py-1.5 rounded-lg transition-all ${
+                  className={`flex items-center space-x-1 px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg font-bold transition-all ${
                     currentView === 'display'
-                      ? 'bg-emerald-700 text-white font-semibold shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                      ? 'bg-white text-orange-600 shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
                   }`}
-                  title="Public TV Display Board"
                 >
-                  <Monitor className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <Monitor className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-600 shrink-0" />
                   <span className="hidden md:inline text-xs sm:text-sm">TV Board</span>
                 </button>
 
@@ -85,9 +76,25 @@ export default function Navbar({ currentView, setView, cartCount, setIsCartOpen,
                   <span className="hidden md:inline">Scan QR</span>
                 </button>
 
+                {/* Prepaid Wallet Button */}
+                <button
+                  onClick={() => {
+                    setCreditModalTab('wallet');
+                    setShowCreditModal(true);
+                  }}
+                  className="flex items-center space-x-1 px-2 py-1.5 sm:px-2.5 sm:py-1.5 rounded-lg text-emerald-800 bg-emerald-50 hover:bg-emerald-100 hover:text-emerald-900 border border-emerald-200/80 transition-all font-bold text-xs sm:text-sm shadow-xs"
+                  title="BMU Canteen - Prepaid Wallet"
+                >
+                  <Wallet className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span className="hidden sm:inline">Wallet</span>
+                </button>
+
                 {/* Credit Dues Button */}
                 <button
-                  onClick={() => setShowCreditModal(true)}
+                  onClick={() => {
+                    setCreditModalTab('credit');
+                    setShowCreditModal(true);
+                  }}
                   className="flex items-center space-x-1 px-2 py-1.5 sm:px-2.5 sm:py-1.5 rounded-lg text-slate-700 hover:text-slate-900 hover:bg-slate-200/60 transition-all font-semibold"
                   title="Staff & Student Credit Dues"
                 >
@@ -202,6 +209,7 @@ export default function Navbar({ currentView, setView, cartCount, setIsCartOpen,
       {/* Customer Credit Dues & Statement Modal */}
       <CustomerCreditModal
         isOpen={showCreditModal}
+        initialTab={creditModalTab}
         onClose={() => setShowCreditModal(false)}
       />
     </>

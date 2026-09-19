@@ -70,6 +70,7 @@ function initDb() {
       desk TEXT DEFAULT '',
       notes TEXT DEFAULT '',
       balance REAL DEFAULT 0,
+      wallet_balance REAL DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
@@ -82,9 +83,31 @@ function initDb() {
       notes TEXT DEFAULT '',
       settled_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS wallet_transactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      account_id INTEGER,
+      customer_name TEXT NOT NULL COLLATE NOCASE,
+      customer_phone TEXT DEFAULT '',
+      type TEXT NOT NULL, -- 'RECHARGE', 'ORDER_PAYMENT', 'REFUND', 'ADJUSTMENT'
+      amount REAL NOT NULL,
+      balance_after REAL DEFAULT 0,
+      payment_method TEXT DEFAULT 'UPI', -- 'UPI', 'CASH', 'WALLET', 'SYSTEM'
+      utr TEXT DEFAULT '',
+      order_id INTEGER,
+      status TEXT NOT NULL DEFAULT 'VERIFIED', -- 'PENDING', 'VERIFIED', 'REJECTED'
+      notes TEXT DEFAULT '',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (account_id) REFERENCES credit_accounts(id)
+    );
   `);
 
   // Safe migrations for existing databases
+  try {
+    db.exec("ALTER TABLE credit_accounts ADD COLUMN wallet_balance REAL DEFAULT 0");
+  } catch (e) {
+    // Column already exists
+  }
   try {
     db.exec("ALTER TABLE orders ADD COLUMN customer_phone TEXT DEFAULT ''");
   } catch (e) {
@@ -293,10 +316,50 @@ function reconcileCustomerCreditOrders(customerName) {
   }
 }
 
+function factoryResetDatabase() {
+  const transaction = db.transaction(() => {
+    // 1. Delete all transactional orders and items
+    db.prepare('DELETE FROM order_items').run();
+    db.prepare('DELETE FROM orders').run();
+    
+    // 2. Delete all credit accounts, settlements, and wallet transactions
+    db.prepare('DELETE FROM wallet_transactions').run();
+    db.prepare('DELETE FROM credit_settlements').run();
+    db.prepare('DELETE FROM credit_accounts').run();
+    
+    // 3. Delete all custom/modified menu items and categories
+    db.prepare('DELETE FROM menu_items').run();
+    db.prepare('DELETE FROM categories').run();
+
+    // 4. Reset sqlite autoincrement sequence counters
+    try {
+      db.prepare("DELETE FROM sqlite_sequence WHERE name IN ('orders', 'order_items', 'credit_accounts', 'credit_settlements', 'wallet_transactions', 'menu_items', 'categories')").run();
+    } catch (e) {}
+
+    // 5. Reset default canteen settings
+    db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('canteen_name', 'BMU Canteen')").run();
+    db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('upi_id', 'bmucanteen@upi')").run();
+    db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('upi_name', 'BMU Office Canteen')").run();
+    db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('is_open', '1')").run();
+    db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('operator_pin', '1513')").run();
+
+    // 6. Re-seed clean categories and default menu items
+    initDb();
+  });
+
+  transaction();
+
+  try {
+    db.pragma('wal_checkpoint(TRUNCATE)');
+    db.pragma('vacuum');
+  } catch (e) {}
+}
+
 initDb();
 
 module.exports = {
   db,
   getNextTokenNumber,
   reconcileCustomerCreditOrders,
+  factoryResetDatabase,
 };

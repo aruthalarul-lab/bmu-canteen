@@ -4,7 +4,7 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const path = require('path');
 const QRCode = require('qrcode');
-const { db, getNextTokenNumber, reconcileCustomerCreditOrders } = require('./db');
+const { db, getNextTokenNumber, reconcileCustomerCreditOrders, factoryResetDatabase } = require('./db');
 
 const app = express();
 const server = http.createServer(app);
@@ -199,6 +199,31 @@ app.patch('/api/menu/:id/toggle-stock', requireOperatorAuth, (req, res) => {
   res.json({ id, is_available: newStatus });
 });
 
+// PATCH /api/menu/:id/toggle-special - Instant 1-Tap Today's Special toggle (Requires Operator Auth)
+app.patch('/api/menu/:id/toggle-special', requireOperatorAuth, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const item = db.prepare('SELECT * FROM menu_items WHERE id = ?').get(id);
+
+  if (!item) {
+    return res.status(404).json({ error: 'Item not found' });
+  }
+
+  const newSpecial = item.is_quick_item === 1 ? 0 : 1;
+  db.prepare('UPDATE menu_items SET is_quick_item = ? WHERE id = ?').run(newSpecial, id);
+
+  const updated = db.prepare(`
+    SELECT m.*, c.name as category_name 
+    FROM menu_items m
+    LEFT JOIN categories c ON m.category_id = c.id
+    WHERE m.id = ?
+  `).get(id);
+
+  // Broadcast instantly to all connected mobile & operator screens
+  io.emit('menu-changed', { action: 'special-toggled', item: updated });
+
+  res.json(updated);
+});
+
 // POST /api/menu - Add new item (Requires Operator Auth)
 app.post('/api/menu', requireOperatorAuth, (req, res) => {
   const { category_id, name, description, price, is_veg, is_quick_item, image_emoji } = req.body;
@@ -311,6 +336,7 @@ app.get('/api/orders/stats', (req, res) => {
       COALESCE(SUM(CASE WHEN status != 'CANCELLED' THEN total_amount ELSE 0 END), 0) as total_sales,
       COALESCE(SUM(CASE WHEN payment_method = 'CASH' AND status != 'CANCELLED' THEN total_amount ELSE 0 END), 0) as cash_sales,
       COALESCE(SUM(CASE WHEN payment_method = 'UPI' AND status != 'CANCELLED' THEN total_amount ELSE 0 END), 0) as upi_sales,
+      COALESCE(SUM(CASE WHEN payment_method = 'WALLET' AND status != 'CANCELLED' THEN total_amount ELSE 0 END), 0) as wallet_sales,
       COALESCE(SUM(CASE WHEN payment_method = 'CREDIT' AND status != 'CANCELLED' THEN total_amount ELSE 0 END), 0) as credit_sales,
       COUNT(CASE WHEN status = 'PENDING' THEN 1 END) as pending_count,
       COUNT(CASE WHEN status = 'PREPARING' THEN 1 END) as preparing_count,
@@ -354,6 +380,7 @@ app.get('/api/orders/daily-accounting', (req, res) => {
         COALESCE(SUM(CASE WHEN status != 'CANCELLED' THEN total_amount ELSE 0 END), 0) as total_sales,
         COALESCE(SUM(CASE WHEN payment_method = 'CASH' AND status != 'CANCELLED' THEN total_amount ELSE 0 END), 0) as cash_sales,
         COALESCE(SUM(CASE WHEN payment_method = 'UPI' AND status != 'CANCELLED' THEN total_amount ELSE 0 END), 0) as upi_sales,
+        COALESCE(SUM(CASE WHEN payment_method = 'WALLET' AND status != 'CANCELLED' THEN total_amount ELSE 0 END), 0) as wallet_sales,
         COALESCE(SUM(CASE WHEN payment_method = 'CREDIT' AND status != 'CANCELLED' THEN total_amount ELSE 0 END), 0) as credit_sales,
         COUNT(CASE WHEN status = 'CANCELLED' THEN 1 END) as cancelled_orders,
         COUNT(CASE WHEN status = 'COMPLETED' THEN 1 END) as completed_orders
@@ -430,7 +457,7 @@ app.post('/api/orders', async (req, res) => {
       return res.status(400).json({ error: 'Customer Name is compulsory.' });
     }
 
-    const finalPaymentMethod = payment_method === 'CASH' ? 'CASH' : payment_method === 'CREDIT' ? 'CREDIT' : 'UPI';
+    const finalPaymentMethod = payment_method === 'CASH' ? 'CASH' : payment_method === 'CREDIT' ? 'CREDIT' : payment_method === 'WALLET' ? 'WALLET' : 'UPI';
     const finalOrderType = order_type === 'COUNTER' ? 'COUNTER' : 'ONLINE';
 
     // 2. Student / Employee / Desk ID is compulsory for online orders
@@ -477,6 +504,27 @@ app.post('/api/orders', async (req, res) => {
         quantity: qty,
         total_price: itemTotal,
       });
+    }
+
+    // 5. For WALLET orders, verify customer account and sufficient prepaid balance
+    let walletAccount = null;
+    if (finalPaymentMethod === 'WALLET') {
+      const cleanCustomerNameForWallet = customer_name.trim();
+      const cleanPhoneForWallet = (customer_phone || '').trim().replace(/\D/g, '');
+      walletAccount = db.prepare('SELECT * FROM credit_accounts WHERE LOWER(customer_name) = LOWER(?)').get(cleanCustomerNameForWallet);
+      if (!walletAccount && cleanPhoneForWallet.length >= 4) {
+        walletAccount = db.prepare('SELECT * FROM credit_accounts WHERE phone = ? OR phone LIKE ?').get(cleanPhoneForWallet, `%${cleanPhoneForWallet.slice(-10)}`);
+      }
+      const availableBal = walletAccount ? (walletAccount.wallet_balance || 0) : 0;
+      if (availableBal < calculatedTotal) {
+        const shortage = calculatedTotal - availableBal;
+        return res.status(400).json({
+          error: `Insufficient wallet balance. Available: ₹${availableBal.toFixed(2)}, Required: ₹${calculatedTotal.toFixed(2)}. Shortage: ₹${shortage.toFixed(2)}. Please recharge your wallet to proceed.`,
+          available: availableBal,
+          required: calculatedTotal,
+          shortage: shortage
+        });
+      }
     }
 
     // Online cash orders remain PENDING until cashier confirms receipt at Counter 1
@@ -535,6 +583,24 @@ app.post('/api/orders', async (req, res) => {
         }
       }
 
+      // If placed with WALLET, deduct prepaid balance immediately and record transaction
+      if (finalPaymentMethod === 'WALLET' && walletAccount) {
+        const newWalletBal = (walletAccount.wallet_balance || 0) - calculatedTotal;
+        db.prepare('UPDATE credit_accounts SET wallet_balance = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(newWalletBal, walletAccount.id);
+        db.prepare(`
+          INSERT INTO wallet_transactions (account_id, customer_name, customer_phone, type, amount, balance_after, payment_method, order_id, status, notes)
+          VALUES (?, ?, ?, 'ORDER_PAYMENT', ?, ?, 'WALLET', ?, 'VERIFIED', ?)
+        `).run(
+          walletAccount.id,
+          walletAccount.customer_name,
+          walletAccount.phone || cleanCustomerPhone,
+          calculatedTotal,
+          newWalletBal,
+          orderId,
+          `Paid for Order #${tokenNo}`
+        );
+      }
+
       return { orderId, tokenNo };
     });
 
@@ -543,6 +609,15 @@ app.post('/api/orders', async (req, res) => {
 
     if (finalPaymentMethod === 'CREDIT') {
       io.emit('credit-updated', { customer_name: cleanCustomerName });
+    }
+
+    if (finalPaymentMethod === 'WALLET' && walletAccount) {
+      const updatedAcc = db.prepare('SELECT wallet_balance FROM credit_accounts WHERE id = ?').get(walletAccount.id);
+      io.emit('wallet-updated', {
+        customer_name: walletAccount.customer_name,
+        wallet_balance: updatedAcc ? updatedAcc.wallet_balance : 0
+      });
+      io.emit('credit-updated', { customer_name: walletAccount.customer_name });
     }
 
     // Generate UPI QR if payment is UPI
@@ -621,6 +696,20 @@ app.patch('/api/orders/:id/status', requireOperatorAuth, (req, res) => {
         WHERE LOWER(customer_name) = LOWER(?)
       `).run(existing.total_amount, existing.customer_name);
       io.emit('credit-updated', { customer_name: existing.customer_name });
+    }
+    // If order was paid via WALLET, refund funds back to customer wallet
+    if (existing.payment_method === 'WALLET' && existing.payment_status === 'PAID') {
+      const wAcc = db.prepare('SELECT * FROM credit_accounts WHERE LOWER(customer_name) = LOWER(?)').get(existing.customer_name);
+      if (wAcc) {
+        const refundBal = (wAcc.wallet_balance || 0) + existing.total_amount;
+        db.prepare('UPDATE credit_accounts SET wallet_balance = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(refundBal, wAcc.id);
+        db.prepare(`
+          INSERT INTO wallet_transactions (account_id, customer_name, customer_phone, type, amount, balance_after, payment_method, order_id, status, notes)
+          VALUES (?, ?, ?, 'REFUND', ?, ?, 'WALLET', ?, 'VERIFIED', ?)
+        `).run(wAcc.id, wAcc.customer_name, wAcc.phone || '', existing.total_amount, refundBal, existing.id, `Refund for Cancelled Order #${existing.token_no}`);
+        io.emit('wallet-updated', { customer_name: wAcc.customer_name, wallet_balance: refundBal });
+        io.emit('credit-updated', { customer_name: wAcc.customer_name });
+      }
     }
     newPayStatus = 'CANCELLED';
   }
@@ -845,12 +934,29 @@ app.get('/api/credit/lookup', (req, res) => {
       ORDER BY id DESC LIMIT 1
     `).get(account.customer_name);
 
+    const pendingWalletRecharge = db.prepare(`
+      SELECT * FROM wallet_transactions 
+      WHERE LOWER(customer_name) = LOWER(?) AND type = 'RECHARGE' AND status = 'PENDING'
+      ORDER BY id DESC LIMIT 1
+    `).get(account.customer_name);
+
+    const walletPassbook = db.prepare(`
+      SELECT wt.*, o.token_no as order_token
+      FROM wallet_transactions wt
+      LEFT JOIN orders o ON wt.order_id = o.id
+      WHERE LOWER(wt.customer_name) = LOWER(?)
+      ORDER BY wt.id DESC LIMIT 20
+    `).all(account.customer_name);
+
     return res.json({
       matchType: 'exact',
       account,
+      wallet_balance: account.wallet_balance || 0,
       orders: enrichedOrders,
       settlements,
-      pendingSettlement: pendingSettlement || null
+      pendingSettlement: pendingSettlement || null,
+      walletTransactions: walletPassbook,
+      pendingWalletRecharge: pendingWalletRecharge || null
     });
   }
 
@@ -862,7 +968,8 @@ app.get('/api/credit/lookup', (req, res) => {
       customer_name: a.customer_name,
       department: a.department,
       phone: a.phone ? a.phone.replace(/(\d{2})\d{4}(\d{4})/, '$1****$2') : '',
-      balance: a.balance
+      balance: a.balance,
+      wallet_balance: a.wallet_balance || 0
     }))
   });
 });
@@ -1192,6 +1299,285 @@ app.get('/api/credit/stats', (req, res) => {
   });
 });
 
+// ---------------- WALLET API ROUTES ----------------
+
+// GET /api/wallet/qr - Generate UPI QR Code & URI for Wallet Top-Up
+app.get('/api/wallet/qr', async (req, res) => {
+  try {
+    const amount = parseFloat(req.query.amount) || 0;
+    const name = (req.query.name || 'BMU Customer').trim();
+    const settings = getSettingsObj();
+    const upiId = settings.upi_id || 'bmucanteen@upi';
+    const upiName = settings.upi_name || 'BMU Canteen';
+    const encodedName = encodeURIComponent(upiName);
+    const safeNote = encodeURIComponent(`Wallet_${name.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 20)}`);
+    const upiUri = `upi://pay?pa=${upiId}&pn=${encodedName}&am=${Number(amount).toFixed(2)}&cu=INR&tn=${safeNote}`;
+    
+    const qrDataUrl = await QRCode.toDataURL(upiUri, {
+      width: 320,
+      margin: 1,
+      color: { dark: '#0f172a', light: '#ffffff' },
+    });
+
+    res.json({ upiUri, qrDataUrl, upiId, upiName, amount, customer_name: name });
+  } catch (err) {
+    console.error('Wallet UPI preview generation error:', err);
+    res.status(500).json({ error: 'Failed to generate UPI QR' });
+  }
+});
+
+// POST /api/wallet/topup - Instant counter top-up by operator (Cash/UPI) (Requires Operator Auth)
+app.post('/api/wallet/topup', requireOperatorAuth, (req, res) => {
+  const { customer_name, phone, department, amount, payment_method, notes } = req.body;
+  const topupAmount = parseFloat(amount);
+  if (!customer_name || !customer_name.trim() || isNaN(topupAmount) || topupAmount <= 0) {
+    return res.status(400).json({ error: 'Valid customer name and positive top-up amount are required' });
+  }
+
+  const cleanName = customer_name.trim();
+  const cleanPhone = (phone || '').trim();
+  const cleanDept = (department || '').trim();
+  const finalMethod = payment_method === 'UPI' ? 'UPI' : 'CASH';
+  const cleanNotes = notes ? notes.trim() : `Counter Top-Up (${finalMethod})`;
+
+  const topupTx = db.transaction(() => {
+    let account = db.prepare('SELECT * FROM credit_accounts WHERE LOWER(customer_name) = LOWER(?)').get(cleanName);
+
+    let accountId;
+    let newWalletBal;
+
+    if (account) {
+      accountId = account.id;
+      newWalletBal = (account.wallet_balance || 0) + topupAmount;
+      db.prepare(`
+        UPDATE credit_accounts 
+        SET wallet_balance = ?,
+            phone = CASE WHEN ? != '' THEN ? ELSE phone END,
+            department = CASE WHEN ? != '' THEN ? ELSE department END,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(newWalletBal, cleanPhone, cleanPhone, cleanDept, cleanDept, accountId);
+    } else {
+      newWalletBal = topupAmount;
+      const resAcc = db.prepare(`
+        INSERT INTO credit_accounts (customer_name, department, phone, desk, balance, wallet_balance)
+        VALUES (?, ?, ?, ?, 0, ?)
+      `).run(cleanName, cleanDept, cleanPhone, cleanDept, newWalletBal);
+      accountId = resAcc.lastInsertRowid;
+    }
+
+    const txRes = db.prepare(`
+      INSERT INTO wallet_transactions (account_id, customer_name, customer_phone, type, amount, balance_after, payment_method, status, notes)
+      VALUES (?, ?, ?, 'RECHARGE', ?, ?, ?, 'VERIFIED', ?)
+    `).run(accountId, cleanName, cleanPhone, topupAmount, newWalletBal, finalMethod, cleanNotes);
+
+    return { accountId, transactionId: txRes.lastInsertRowid, newWalletBal };
+  });
+
+  const { accountId, transactionId, newWalletBal } = topupTx();
+
+  io.emit('wallet-updated', { customer_name: cleanName, wallet_balance: newWalletBal });
+  io.emit('credit-updated', { customer_name: cleanName });
+
+  res.json({
+    success: true,
+    message: `₹${topupAmount.toFixed(2)} successfully credited to ${cleanName}'s wallet`,
+    customer_name: cleanName,
+    new_wallet_balance: newWalletBal,
+    transaction_id: transactionId
+  });
+});
+
+// POST /api/wallet/customer-recharge - Customer online UPI recharge request (Option B: status = 'PENDING')
+app.post('/api/wallet/customer-recharge', (req, res) => {
+  const { customer_name, phone, department, amount, utr, notes } = req.body;
+  const rechargeAmount = parseFloat(amount);
+  if (!customer_name || !customer_name.trim() || isNaN(rechargeAmount) || rechargeAmount <= 0) {
+    return res.status(400).json({ error: 'Valid customer name and positive recharge amount are required' });
+  }
+  const cleanUtr = (utr || '').trim();
+  if (!cleanUtr || cleanUtr.length < 6) {
+    return res.status(400).json({ error: 'Valid UPI Reference / UTR Number (minimum 6 digits) is required' });
+  }
+
+  const cleanName = customer_name.trim();
+  const cleanPhone = (phone || '').trim();
+  const cleanDept = (department || '').trim();
+
+  // Find or create customer account
+  let account = db.prepare('SELECT * FROM credit_accounts WHERE LOWER(customer_name) = LOWER(?)').get(cleanName);
+
+  let accountId;
+  let currentWalletBal = 0;
+  if (account) {
+    accountId = account.id;
+    currentWalletBal = account.wallet_balance || 0;
+    if (cleanPhone || cleanDept) {
+      db.prepare(`
+        UPDATE credit_accounts 
+        SET phone = CASE WHEN ? != '' THEN ? ELSE phone END,
+            department = CASE WHEN ? != '' THEN ? ELSE department END,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(cleanPhone, cleanPhone, cleanDept, cleanDept, accountId);
+    }
+  } else {
+    const resAcc = db.prepare(`
+      INSERT INTO credit_accounts (customer_name, department, phone, desk, balance, wallet_balance)
+      VALUES (?, ?, ?, ?, 0, 0)
+    `).run(cleanName, cleanDept, cleanPhone, cleanDept);
+    accountId = resAcc.lastInsertRowid;
+  }
+
+  const finalNotes = notes ? notes.trim() : `Customer UPI Recharge (UTR: ${cleanUtr})`;
+
+  const resTx = db.prepare(`
+    INSERT INTO wallet_transactions (account_id, customer_name, customer_phone, type, amount, balance_after, payment_method, utr, status, notes)
+    VALUES (?, ?, ?, 'RECHARGE', ?, ?, 'UPI', ?, 'PENDING', ?)
+  `).run(accountId, cleanName, cleanPhone, rechargeAmount, currentWalletBal, cleanUtr, finalNotes);
+
+  const transactionId = resTx.lastInsertRowid;
+
+  // Real-time broadcast to Operator Console
+  io.emit('wallet-recharge-submitted', {
+    id: transactionId,
+    customer_name: cleanName,
+    phone: cleanPhone,
+    department: cleanDept,
+    amount: rechargeAmount,
+    utr: cleanUtr,
+    current_wallet_balance: currentWalletBal,
+    created_at: new Date().toISOString()
+  });
+
+  res.json({
+    success: true,
+    status: 'PENDING',
+    transaction_id: transactionId,
+    message: 'Recharge request submitted! Awaiting cashier confirmation.',
+    customer_name: cleanName,
+    amount: rechargeAmount,
+    current_wallet_balance: currentWalletBal,
+    utr: cleanUtr
+  });
+});
+
+// GET /api/wallet/pending-recharges - List all pending customer wallet recharges for cashier verification (Requires Operator Auth)
+app.get('/api/wallet/pending-recharges', requireOperatorAuth, (req, res) => {
+  const pending = db.prepare(`
+    SELECT wt.*, ca.department, ca.balance as credit_dues, ca.wallet_balance as current_wallet_balance
+    FROM wallet_transactions wt
+    LEFT JOIN credit_accounts ca ON wt.account_id = ca.id OR LOWER(wt.customer_name) = LOWER(ca.customer_name)
+    WHERE wt.type = 'RECHARGE' AND wt.status = 'PENDING'
+    ORDER BY wt.id DESC
+  `).all();
+  res.json(pending);
+});
+
+// POST /api/wallet/recharges/:id/verify - Cashier approves customer wallet recharge (Requires Operator Auth)
+app.post('/api/wallet/recharges/:id/verify', requireOperatorAuth, (req, res) => {
+  const rechargeId = parseInt(req.params.id);
+  const txRecord = db.prepare('SELECT * FROM wallet_transactions WHERE id = ?').get(rechargeId);
+  if (!txRecord) {
+    return res.status(404).json({ error: 'Recharge transaction not found' });
+  }
+  if (txRecord.status === 'VERIFIED') {
+    return res.status(400).json({ error: 'Recharge is already verified' });
+  }
+
+  let account = null;
+  if (txRecord.account_id) {
+    account = db.prepare('SELECT * FROM credit_accounts WHERE id = ?').get(txRecord.account_id);
+  }
+  if (!account) {
+    account = db.prepare('SELECT * FROM credit_accounts WHERE LOWER(customer_name) = LOWER(?)').get(txRecord.customer_name);
+  }
+  if (!account) {
+    return res.status(404).json({ error: 'Customer account not found' });
+  }
+
+  const verifyTx = db.transaction(() => {
+    const newWalletBal = (account.wallet_balance || 0) + txRecord.amount;
+    db.prepare(`
+      UPDATE credit_accounts 
+      SET wallet_balance = ?, updated_at = CURRENT_TIMESTAMP 
+      WHERE id = ?
+    `).run(newWalletBal, account.id);
+
+    db.prepare(`
+      UPDATE wallet_transactions 
+      SET status = 'VERIFIED', balance_after = ? 
+      WHERE id = ?
+    `).run(newWalletBal, rechargeId);
+
+    return newWalletBal;
+  });
+
+  const newWalletBal = verifyTx();
+
+  io.emit('wallet-recharge-verified', {
+    transaction_id: rechargeId,
+    customer_name: account.customer_name,
+    amount: txRecord.amount,
+    new_wallet_balance: newWalletBal,
+    utr: txRecord.utr
+  });
+  io.emit('wallet-updated', { customer_name: account.customer_name, wallet_balance: newWalletBal });
+  io.emit('credit-updated', { customer_name: account.customer_name });
+
+  res.json({
+    success: true,
+    message: 'Recharge verified and wallet credited successfully',
+    transaction_id: rechargeId,
+    customer_name: account.customer_name,
+    amount: txRecord.amount,
+    new_wallet_balance: newWalletBal,
+    utr: txRecord.utr
+  });
+});
+
+// POST /api/wallet/recharges/:id/reject - Cashier rejects invalid customer wallet recharge (Requires Operator Auth)
+app.post('/api/wallet/recharges/:id/reject', requireOperatorAuth, (req, res) => {
+  const rechargeId = parseInt(req.params.id);
+  const txRecord = db.prepare('SELECT * FROM wallet_transactions WHERE id = ?').get(rechargeId);
+  if (!txRecord) {
+    return res.status(404).json({ error: 'Recharge transaction not found' });
+  }
+
+  db.prepare("UPDATE wallet_transactions SET status = 'REJECTED' WHERE id = ?").run(rechargeId);
+
+  io.emit('wallet-recharge-rejected', {
+    transaction_id: rechargeId,
+    customer_name: txRecord.customer_name
+  });
+  io.emit('wallet-updated', { customer_name: txRecord.customer_name });
+
+  res.json({
+    success: true,
+    message: 'Recharge rejected',
+    transaction_id: rechargeId
+  });
+});
+
+// GET /api/wallet/passbook/:customerName - Customer passbook / transaction history
+app.get('/api/wallet/passbook/:customerName', (req, res) => {
+  const customerName = decodeURIComponent(req.params.customerName).trim();
+  const account = db.prepare('SELECT * FROM credit_accounts WHERE LOWER(customer_name) = LOWER(?)').get(customerName);
+
+  const transactions = db.prepare(`
+    SELECT wt.*, o.token_no as order_token
+    FROM wallet_transactions wt
+    LEFT JOIN orders o ON wt.order_id = o.id
+    WHERE LOWER(wt.customer_name) = LOWER(?)
+    ORDER BY wt.id DESC
+  `).all(customerName);
+
+  res.json({
+    account: account || { customer_name: customerName, wallet_balance: 0, balance: 0 },
+    transactions
+  });
+});
+
 // WebSocket Connection Events
 io.on('connection', (socket) => {
   console.log(`[Socket] Client connected: ${socket.id}`);
@@ -1204,6 +1590,27 @@ io.on('connection', (socket) => {
 // Health check endpoint for Render / Railway container health checks
 app.get('/healthz', (req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Secret Master Factory Reset (Completely hidden from all standard menus)
+// Requires master secret key 'BMU9988' or 'BMU_SECRET_RESET_9988'
+app.post('/api/admin/hidden-factory-reset', (req, res) => {
+  const masterKey = req.headers['x-master-reset-key'] || req.body?.secretKey;
+  if (masterKey !== 'BMU_SECRET_RESET_9988' && masterKey !== 'BMU9988') {
+    return res.status(403).json({ error: 'Access denied: Invalid master reset authorization' });
+  }
+
+  try {
+    factoryResetDatabase();
+    io.emit('menu-changed');
+    io.emit('order-created');
+    io.emit('credit-updated', { customer_name: '' });
+    io.emit('wallet-updated', { customer_name: '' });
+    res.json({ success: true, message: 'System reset to clean factory defaults successfully' });
+  } catch (err) {
+    console.error('Factory reset failed:', err);
+    res.status(500).json({ error: 'Failed to perform factory reset' });
+  }
 });
 
 // Production: Serve built Vite frontend static files

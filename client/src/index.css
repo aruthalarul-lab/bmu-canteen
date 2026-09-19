@@ -17,6 +17,46 @@ html, body {
     -ms-overflow-style: none;  /* IE and Edge */
     scrollbar-width: none;  /* Firefox */
   }
+
+  /* Amber horizontal scrollbar for POS shelf */
+  .custom-scrollbar-amber::-webkit-scrollbar {
+    height: 6px;
+  }
+  .custom-scrollbar-amber::-webkit-scrollbar-track {
+    background: #fef3c7;
+    border-radius: 9999px;
+  }
+  .custom-scrollbar-amber::-webkit-scrollbar-thumb {
+    background: #f59e0b;
+    border-radius: 9999px;
+  }
+  .custom-scrollbar-amber::-webkit-scrollbar-thumb:hover {
+    background: #d97706;
+  }
+  .custom-scrollbar-amber {
+    scrollbar-width: thin;
+    scrollbar-color: #f59e0b #fef3c7;
+  }
+
+  /* Orange horizontal scrollbar for Customer specials shelf */
+  .custom-scrollbar-orange::-webkit-scrollbar {
+    height: 6px;
+  }
+  .custom-scrollbar-orange::-webkit-scrollbar-track {
+    background: #ffedd5;
+    border-radius: 9999px;
+  }
+  .custom-scrollbar-orange::-webkit-scrollbar-thumb {
+    background: #f97316;
+    border-radius: 9999px;
+  }
+  .custom-scrollbar-orange::-webkit-scrollbar-thumb:hover {
+    background: #ea580c;
+  }
+  .custom-scrollbar-orange {
+    scrollbar-width: thin;
+    scrollbar-color: #f97316 #ffedd5;
+  }
 }
 
 /* Pulse glow animation for Ready orders */

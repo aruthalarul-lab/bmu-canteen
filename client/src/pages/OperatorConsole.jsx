@@ -5,10 +5,14 @@ import {
   Trash2, Plus, Minus, ArrowRight, Settings, Check, X, ShieldAlert,
   Flame, Sparkles, TrendingUp, CreditCard, Edit2, Search,
   Lock, Unlock, BookOpen, FileText, Users, Printer, Download, Upload,
-  Receipt, Calendar, Filter, UserPlus, UserCheck, Phone
+  Receipt, Calendar, Filter, UserPlus, UserCheck, Phone, Star,
+  Wallet, Zap
 } from 'lucide-react';
 import { playNewOrderSound, playOrderReadySound } from '../utils/audio';
 import socket from '../services/socket';
+import WhatsAppIcon from '../components/WhatsAppIcon';
+import MenuIconPicker from '../components/MenuIconPicker';
+import { sendWhatsAppDueReminder, shareSpecialsWhatsApp, sendOrderReadyWhatsApp } from '../utils/whatsapp';
 
 export default function OperatorConsole() {
   const [tab, setTab] = useState('queue'); // 'queue', 'pos', 'stock', 'settings'
@@ -71,6 +75,13 @@ export default function OperatorConsole() {
   const [restoring, setRestoring] = useState(false);
   const [pendingSettlements, setPendingSettlements] = useState([]);
   const [verifyingSettlementId, setVerifyingSettlementId] = useState(null);
+  const [pendingWalletRecharges, setPendingWalletRecharges] = useState([]);
+  const [verifyingRechargeId, setVerifyingRechargeId] = useState(null);
+  const [showWalletTopupModal, setShowWalletTopupModal] = useState(null);
+  const [walletTopupAmount, setWalletTopupAmount] = useState('');
+  const [walletTopupMethod, setWalletTopupMethod] = useState('CASH');
+  const [walletTopupNotes, setWalletTopupNotes] = useState('');
+  const [walletTopupSubmitting, setWalletTopupSubmitting] = useState(false);
 
   // Filter credit accounts: hide 0-balance customers by default unless showZeroBalance is toggled
   const visibleCreditAccounts = creditAccounts
@@ -139,6 +150,25 @@ export default function OperatorConsole() {
   const matchingCreditCustomers = creditAccounts.filter(acc => {
     if (!creditCustomerSearch.trim()) return true;
     const q = creditCustomerSearch.toLowerCase().trim();
+    const cleanPhone = (acc.phone || '').replace(/\D/g, '');
+    const cleanQ = q.replace(/\D/g, '');
+    const phoneMatch = cleanQ.length >= 3 && cleanPhone.includes(cleanQ);
+    return (
+      (acc.customer_name || '').toLowerCase().includes(q) ||
+      (acc.department || '').toLowerCase().includes(q) ||
+      (acc.desk || '').toLowerCase().includes(q) ||
+      (acc.phone || '').toLowerCase().includes(q) ||
+      phoneMatch
+    );
+  });
+
+  // Fast-POS Wallet Customer Select Modal State
+  const [showWalletCustomerModal, setShowWalletCustomerModal] = useState(false);
+  const [walletCustomerSearch, setWalletCustomerSearch] = useState('');
+
+  const matchingWalletCustomers = creditAccounts.filter(acc => {
+    if (!walletCustomerSearch.trim()) return true;
+    const q = walletCustomerSearch.toLowerCase().trim();
     const cleanPhone = (acc.phone || '').replace(/\D/g, '');
     const cleanQ = q.replace(/\D/g, '');
     const phoneMatch = cleanQ.length >= 3 && cleanPhone.includes(cleanQ);
@@ -321,19 +351,99 @@ export default function OperatorConsole() {
     setPinInput('');
   };
 
-  // Credit Ledger Actions
+  // Credit & Wallet Ledger Actions
   const loadCreditData = async () => {
     try {
-      const [accRes, statsRes, pendingRes] = await Promise.all([
+      const [accRes, statsRes, pendingRes, pendingWalletRes] = await Promise.all([
         fetch('/api/credit/accounts'),
         fetch('/api/credit/stats'),
-        operatorFetch('/api/credit/pending-settlements')
+        operatorFetch('/api/credit/pending-settlements'),
+        operatorFetch('/api/wallet/pending-recharges')
       ]);
       if (accRes.ok) setCreditAccounts(await accRes.json());
       if (statsRes.ok) setCreditStats(await statsRes.json());
       if (pendingRes.ok) setPendingSettlements(await pendingRes.json());
+      if (pendingWalletRes.ok) setPendingWalletRecharges(await pendingWalletRes.json());
     } catch (err) {
-      console.error('Failed to load credit data:', err);
+      console.error('Failed to load credit & wallet data:', err);
+    }
+  };
+
+  const handleVerifyWalletRecharge = async (rechargeId) => {
+    setVerifyingRechargeId(rechargeId);
+    try {
+      const res = await operatorFetch(`/api/wallet/recharges/${rechargeId}/verify`, {
+        method: 'POST'
+      });
+      if (res.ok) {
+        setPendingWalletRecharges(prev => prev.filter(r => r.id !== rechargeId));
+        await loadCreditData();
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Failed to verify wallet recharge');
+      }
+    } catch (err) {
+      alert('Error verifying wallet recharge');
+    } finally {
+      setVerifyingRechargeId(null);
+    }
+  };
+
+  const handleRejectWalletRecharge = async (rechargeId) => {
+    if (!confirm('Are you sure you want to decline/reject this wallet recharge? The customer will be informed.')) return;
+    try {
+      const res = await operatorFetch(`/api/wallet/recharges/${rechargeId}/reject`, {
+        method: 'POST'
+      });
+      if (res.ok) {
+        setPendingWalletRecharges(prev => prev.filter(r => r.id !== rechargeId));
+        await loadCreditData();
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Failed to reject wallet recharge');
+      }
+    } catch (err) {
+      alert('Error rejecting wallet recharge');
+    }
+  };
+
+  const handleWalletTopupSubmit = async (e) => {
+    e.preventDefault();
+    if (!showWalletTopupModal || !walletTopupAmount || parseFloat(walletTopupAmount) <= 0) {
+      alert('Please enter a valid recharge amount');
+      return;
+    }
+    setWalletTopupSubmitting(true);
+    try {
+      const res = await operatorFetch('/api/wallet/topup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customer_name: showWalletTopupModal.customer_name,
+          customer_phone: showWalletTopupModal.phone || '',
+          amount: parseFloat(walletTopupAmount),
+          payment_method: walletTopupMethod,
+          notes: walletTopupNotes || 'Counter Cashier Top-Up'
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        await loadCreditData();
+        if (selectedLedger === showWalletTopupModal.customer_name) {
+          viewCustomerLedger(showWalletTopupModal.customer_name);
+        }
+        setShowWalletTopupModal(null);
+        setWalletTopupAmount('');
+        setWalletTopupNotes('');
+        alert(`🎉 Wallet recharged successfully! New balance: ₹${data.new_wallet_balance}`);
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Failed to top up wallet');
+      }
+    } catch (err) {
+      alert('Error topping up wallet');
+    } finally {
+      setWalletTopupSubmitting(false);
     }
   };
 
@@ -712,6 +822,11 @@ export default function OperatorConsole() {
       loadCreditData();
     };
 
+    const handleWalletRechargeSubmitted = () => {
+      if (audioEnabled) playNewOrderSound();
+      loadCreditData();
+    };
+
     socket.on('new-order', handleNewOrder);
     socket.on('order-status-changed', handleStatusChanged);
     socket.on('stock-updated', handleStockUpdated);
@@ -720,6 +835,10 @@ export default function OperatorConsole() {
     socket.on('credit-settlement-submitted', handleSettlementSubmitted);
     socket.on('credit-settlement-verified', loadCreditData);
     socket.on('credit-settlement-rejected', loadCreditData);
+    socket.on('wallet-updated', loadCreditData);
+    socket.on('wallet-recharge-submitted', handleWalletRechargeSubmitted);
+    socket.on('wallet-recharge-verified', loadCreditData);
+    socket.on('wallet-recharge-rejected', loadCreditData);
 
     return () => {
       socket.off('new-order', handleNewOrder);
@@ -730,6 +849,10 @@ export default function OperatorConsole() {
       socket.off('credit-settlement-submitted', handleSettlementSubmitted);
       socket.off('credit-settlement-verified', loadCreditData);
       socket.off('credit-settlement-rejected', loadCreditData);
+      socket.off('wallet-updated', loadCreditData);
+      socket.off('wallet-recharge-submitted', handleWalletRechargeSubmitted);
+      socket.off('wallet-recharge-verified', loadCreditData);
+      socket.off('wallet-recharge-rejected', loadCreditData);
     };
   }, [audioEnabled]);
 
@@ -795,6 +918,17 @@ export default function OperatorConsole() {
     }
   };
 
+  // 1-Tap Today's Special / Quick Pick Toggle
+  const toggleSpecial = async (itemId) => {
+    try {
+      setMenuItems(prev => prev.map(i => i.id === itemId ? { ...i, is_quick_item: i.is_quick_item === 1 ? 0 : 1 } : i));
+      await operatorFetch(`/api/menu/${itemId}/toggle-special`, { method: 'PATCH' });
+    } catch (err) {
+      console.error(err);
+      loadData();
+    }
+  };
+
   // Fast-POS Cart Helpers
   const addToPosCart = (item) => {
     setPosCart(prev => {
@@ -822,10 +956,10 @@ export default function OperatorConsole() {
     setPosSubmitting(true);
 
     try {
-      const finalName = overrideName || posCustomerName.trim() || (payMethod === 'CREDIT' ? 'Credit Staff' : 'Counter Walk-in');
+      const finalName = overrideName || posCustomerName.trim() || (payMethod === 'CREDIT' ? 'Credit Staff' : payMethod === 'WALLET' ? 'Wallet Customer' : 'Counter Walk-in');
       const payload = {
         customer_name: finalName,
-        customer_desk: overrideDept || (payMethod === 'CREDIT' ? 'Staff Tab' : 'Counter 1 POS'),
+        customer_desk: overrideDept || (payMethod === 'CREDIT' ? 'Staff Tab' : payMethod === 'WALLET' ? 'BMU Wallet POS' : 'Counter 1 POS'),
         customer_phone: overridePhone || '',
         payment_method: payMethod,
         order_type: 'COUNTER',
@@ -853,8 +987,9 @@ export default function OperatorConsole() {
       setPosCart([]);
       setPosCustomerName('');
       setShowCreditCustomerModal(false);
+      setShowWalletCustomerModal(false);
 
-      if (payMethod === 'CREDIT') {
+      if (payMethod === 'CREDIT' || payMethod === 'WALLET') {
         loadCreditData();
       }
 
@@ -873,6 +1008,15 @@ export default function OperatorConsole() {
   // Credit Customer Selection Handler
   const handleSelectCustomerForCredit = async (acc) => {
     await submitPosOrder('CREDIT', acc.customer_name, acc.phone, acc.department || acc.desk);
+  };
+
+  // Wallet Customer Selection Handler
+  const handleSelectCustomerForWallet = async (acc) => {
+    if ((Number(acc.wallet_balance) || 0) < posTotal) {
+      alert(`⚠️ Insufficient Wallet Balance! Customer has ₹${acc.wallet_balance || 0} but bill amount is ₹${posTotal}. Please top up the wallet first.`);
+      return;
+    }
+    await submitPosOrder('WALLET', acc.customer_name, acc.phone, acc.department || acc.desk);
   };
 
   // Quick Add Customer & Place Credit Order Handler
@@ -910,6 +1054,57 @@ export default function OperatorConsole() {
       alert('Failed to save settings');
     } finally {
       setSettingsSaving(false);
+    }
+  };
+
+  // Secret Master Reset (Hidden from all standard menus)
+  const [secretClickCount, setSecretClickCount] = useState(0);
+  const [lastSecretClickTime, setLastSecretClickTime] = useState(0);
+
+  const handleSecretResetClick = async () => {
+    const now = Date.now();
+    const count = (now - lastSecretClickTime < 1800) ? secretClickCount + 1 : 1;
+    setLastSecretClickTime(now);
+    setSecretClickCount(count);
+
+    if (count >= 5) {
+      setSecretClickCount(0);
+      const pass = window.prompt("Enter Master Security Code:");
+      if (!pass) return;
+
+      if (pass.trim() === '9988' || pass.trim() === 'BMU9988') {
+        const confirmWipe = window.confirm(
+          "⚠️ MASTER RESET CONFIRMATION:\n\n" +
+          "You are about to perform a FULL FACTORY RESET.\n\n" +
+          "• All test orders will be permanently erased (Tokens reset to #1)\n" +
+          "• All credit ledger balances & customer statements will be cleared\n" +
+          "• Fresh default 30 menu items will be restored\n\n" +
+          "Do you wish to proceed?"
+        );
+        if (!confirmWipe) return;
+
+        try {
+          const res = await fetch('/api/admin/hidden-factory-reset', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-master-reset-key': 'BMU_SECRET_RESET_9988'
+            },
+            body: JSON.stringify({ secretKey: 'BMU_SECRET_RESET_9988' })
+          });
+          const data = await res.json();
+          if (res.ok) {
+            alert("✅ Factory Reset Complete! All test data wiped and fresh clean system restored.");
+            window.location.reload();
+          } else {
+            alert("Reset Error: " + (data.error || 'Failed to reset'));
+          }
+        } catch (err) {
+          alert("Connection error: " + err.message);
+        }
+      } else {
+        alert("Invalid security code.");
+      }
     }
   };
 
@@ -1143,10 +1338,10 @@ export default function OperatorConsole() {
               }`}
             >
               <BookOpen className="w-4 h-4" />
-              <span>Weekly Credit</span>
-              {pendingSettlements.length > 0 ? (
+              <span>Credit & Wallet</span>
+              {pendingSettlements.length > 0 || pendingWalletRecharges.length > 0 ? (
                 <span className="px-1.5 py-0.5 rounded-full text-[10px] font-black bg-amber-400 text-slate-900 animate-pulse border border-amber-300">
-                  {pendingSettlements.length} To Verify
+                  {pendingSettlements.length + pendingWalletRecharges.length} To Verify
                 </span>
               ) : creditStats.total_due > 0 ? (
                 <span className="px-1.5 py-0.5 rounded-full text-[10px] font-black bg-rose-500 text-white">
@@ -1570,22 +1765,31 @@ export default function OperatorConsole() {
                         ))}
                       </div>
 
-                      {/* Progression & Cancel Buttons */}
-                      <div className="flex items-center gap-2">
+                      {/* Progression, WhatsApp Alert & Cancel Buttons */}
+                      <div className="flex items-center gap-1.5">
                         <button
                           onClick={() => cancelOrder(order.id, order.token_no)}
-                          className="py-2.5 px-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs border border-rose-200 transition-all flex items-center justify-center gap-1 shrink-0"
+                          className="py-2.5 px-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs border border-rose-200 transition-all flex items-center justify-center gap-1 shrink-0"
                           title="Cancel Order"
                         >
                           <X className="w-3.5 h-3.5" />
-                          <span>Cancel</span>
                         </button>
+                        {order.customer_phone && (
+                          <button
+                            onClick={() => sendOrderReadyWhatsApp({ order, settings })}
+                            className="py-2.5 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white text-xs font-bold shadow-xs transition-all flex items-center justify-center gap-1 shrink-0"
+                            title="Send 1-Click WhatsApp Ready Alert to Customer"
+                          >
+                            <WhatsAppIcon className="w-4 h-4 fill-white" />
+                            <span className="hidden sm:inline">WhatsApp</span>
+                          </button>
+                        )}
                         <button
                           onClick={() => advanceOrderStatus(order.id, 'READY', order.payment_method === 'CREDIT' ? 'PENDING' : 'PAID')}
                           className="flex-1 py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white font-extrabold text-xs shadow-md transition-all flex items-center justify-center space-x-1.5"
                         >
                           <CheckCircle className="w-4 h-4" />
-                          <span>Hand Over Food (Done)</span>
+                          <span>Hand Over (Done)</span>
                         </button>
                       </div>
                     </div>
@@ -1604,6 +1808,52 @@ export default function OperatorConsole() {
             
             {/* Left: Quick Item Buttons */}
             <div className="lg:col-span-2 space-y-4">
+              {/* Today's Specials / Fast Picks Top Shelf for Rush Billing */}
+              {menuItems.some(i => i.is_quick_item === 1 && i.is_available === 1) && (
+                <div className="bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 border border-amber-200/90 rounded-2xl p-3 shadow-xs">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-1.5 text-xs font-black text-amber-900 tracking-wide uppercase">
+                      <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+                      <span>Today's Specials • 1-Tap Fast Pick</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => shareSpecialsWhatsApp({ 
+                          specials: menuItems.filter(i => i.is_quick_item === 1 && i.is_available === 1),
+                          canteenName: settings.canteen_name || 'BMU Canteen'
+                        })}
+                        className="px-2.5 py-1 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white text-[11px] font-bold flex items-center gap-1 shadow-xs transition-all"
+                        title="Broadcast Today's Specials on WhatsApp Groups or Status"
+                      >
+                        <WhatsAppIcon className="w-3.5 h-3.5 fill-white" />
+                        <span>Broadcast</span>
+                      </button>
+                      <span className="text-[10px] font-bold text-amber-800 bg-amber-200/70 px-2 py-0.5 rounded-full hidden sm:inline-block">
+                        Rush Ready
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 overflow-x-auto pb-2.5 pt-0.5 custom-scrollbar-amber">
+                    {menuItems
+                      .filter(i => i.is_quick_item === 1 && i.is_available === 1)
+                      .map(item => (
+                        <button
+                          key={`pos-quick-${item.id}`}
+                          onClick={() => addToPosCart(item)}
+                          className="flex items-center gap-2 px-3 py-2 bg-white hover:bg-amber-100/80 border border-amber-300 rounded-xl shadow-xs shrink-0 transition-all active:scale-95 group text-left"
+                        >
+                          <span className="text-xl group-hover:scale-110 transition-transform select-none">{item.image_emoji || '⭐'}</span>
+                          <div>
+                            <p className="text-xs font-black text-slate-900 leading-tight whitespace-nowrap">{item.name}</p>
+                            <p className="text-[11px] font-black text-orange-600">₹{item.price}</p>
+                          </div>
+                          <span className="ml-1 w-5 h-5 rounded-full bg-amber-500 text-white font-bold text-xs flex items-center justify-center shadow-xs">+</span>
+                        </button>
+                      ))}
+                  </div>
+                </div>
+              )}
+
               {/* Category Pills */}
               <div className="flex items-center space-x-2 overflow-x-auto pb-2 no-scrollbar">
                 <button
@@ -1635,7 +1885,12 @@ export default function OperatorConsole() {
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {menuItems
                   .filter(i => posCategory === 'ALL' || String(i.category_id) === String(posCategory))
-                  .sort((a, b) => (b.is_available === 1 ? 1 : 0) - (a.is_available === 1 ? 1 : 0))
+                  .sort((a, b) => {
+                    if ((b.is_available === 1 ? 1 : 0) !== (a.is_available === 1 ? 1 : 0)) {
+                      return (b.is_available === 1 ? 1 : 0) - (a.is_available === 1 ? 1 : 0);
+                    }
+                    return (b.is_quick_item === 1 ? 1 : 0) - (a.is_quick_item === 1 ? 1 : 0);
+                  })
                   .map(item => {
                     const isAvailable = item.is_available === 1;
                     return (
@@ -1651,7 +1906,14 @@ export default function OperatorConsole() {
                       >
                         <div className="flex items-start justify-between w-full">
                           <span className="text-2xl select-none">{item.image_emoji || '🍲'}</span>
-                          <span className="font-extrabold text-sm text-slate-900">₹{item.price}</span>
+                          <div className="text-right">
+                            <span className="font-extrabold text-sm text-slate-900 block">₹{item.price}</span>
+                            {item.is_quick_item === 1 && (
+                              <span className="inline-flex items-center gap-0.5 text-[9px] font-black bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-md border border-amber-200">
+                                <Star className="w-2.5 h-2.5 fill-amber-500 text-amber-500" /> Special
+                              </span>
+                            )}
+                          </div>
                         </div>
                         <div>
                           <p className="font-bold text-xs sm:text-sm text-slate-900 line-clamp-1 leading-tight">
@@ -1747,8 +2009,8 @@ export default function OperatorConsole() {
                   <span className="text-2xl font-black">₹{posTotal}</span>
                 </div>
 
-                {/* 3-Tap Payment Buttons */}
-                <div className="grid grid-cols-3 gap-2">
+                {/* 4-Tap Payment Buttons */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <button
                     disabled={posCart.length === 0 || posSubmitting}
                     onClick={() => submitPosOrder('CASH')}
@@ -1765,6 +2027,19 @@ export default function OperatorConsole() {
                   >
                     <span>⚡ UPI QR</span>
                     <span className="text-[10px] font-normal opacity-90">Paid ₹{posTotal}</span>
+                  </button>
+
+                  <button
+                    disabled={posCart.length === 0 || posSubmitting}
+                    onClick={() => {
+                      const initialSearch = posCustomerName.trim();
+                      setWalletCustomerSearch(initialSearch);
+                      setShowWalletCustomerModal(true);
+                    }}
+                    className="py-3 px-2 rounded-2xl bg-gradient-to-r from-teal-600 to-emerald-700 hover:from-teal-700 hover:to-emerald-800 active:scale-95 disabled:opacity-50 text-white font-black text-xs shadow-md shadow-teal-600/20 transition-all flex flex-col items-center justify-center"
+                  >
+                    <span>👛 WALLET</span>
+                    <span className="text-[10px] font-normal opacity-90">Debit ₹{posTotal}</span>
                   </button>
 
                   <button
@@ -1811,6 +2086,17 @@ export default function OperatorConsole() {
                 <span className="text-xs font-bold text-slate-500 hidden sm:inline">
                   {menuItems.filter(i => i.is_available === 1).length} / {menuItems.length} Available
                 </span>
+                <button
+                  onClick={() => shareSpecialsWhatsApp({ 
+                    specials: menuItems.filter(i => i.is_quick_item === 1 && i.is_available === 1),
+                    canteenName: settings.canteen_name || 'BMU Canteen'
+                  })}
+                  className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs shadow-md shadow-emerald-500/20 flex items-center space-x-1.5 transition-all active:scale-95"
+                  title="Broadcast Today's Specials to WhatsApp Groups or Status"
+                >
+                  <WhatsAppIcon className="w-4 h-4 fill-white" />
+                  <span className="hidden sm:inline">WhatsApp Specials</span>
+                </button>
                 <button
                   onClick={() => setShowAddItemModal(true)}
                   className="px-3.5 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs shadow-md shadow-orange-500/20 flex items-center space-x-1.5 transition-all active:scale-95"
@@ -1886,34 +2172,49 @@ export default function OperatorConsole() {
                   return (
                     <div
                       key={item.id}
-                      className={`p-3.5 rounded-2xl border flex items-center justify-between gap-2 transition-all ${
+                      className={`p-3.5 rounded-2xl border flex flex-col justify-between gap-3 transition-all ${
                         isAvailable
                           ? 'bg-white border-slate-200 shadow-sm hover:border-slate-300'
                           : 'bg-rose-50/50 border-rose-200'
                       }`}
                     >
-                      <div className="flex items-center space-x-3 min-w-0">
-                        <span className="text-2xl shrink-0">{item.image_emoji || '🍲'}</span>
-                        <div className="min-w-0">
-                          <div className="flex items-center space-x-1.5">
+                      <div className="flex items-start space-x-3">
+                        <span className="text-2xl shrink-0 select-none pt-0.5">{item.image_emoji || '🍲'}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start space-x-1.5">
                             {item.is_veg === 1 ? (
-                              <span className="w-2.5 h-2.5 rounded-sm border border-emerald-600 bg-white flex items-center justify-center p-0.5 shrink-0" title="Veg">
+                              <span className="w-2.5 h-2.5 rounded-sm border border-emerald-600 bg-white flex items-center justify-center p-0.5 shrink-0 mt-1" title="Veg">
                                 <span className="w-1 h-1 rounded-full bg-emerald-600"></span>
                               </span>
                             ) : (
-                              <span className="w-2.5 h-2.5 rounded-sm border border-rose-600 bg-white flex items-center justify-center p-0.5 shrink-0" title="Non-Veg">
+                              <span className="w-2.5 h-2.5 rounded-sm border border-rose-600 bg-white flex items-center justify-center p-0.5 shrink-0 mt-1" title="Non-Veg">
                                 <span className="w-1 h-1 rounded-full bg-rose-600"></span>
                               </span>
                             )}
-                            <p className="font-bold text-sm text-slate-900 truncate">{item.name}</p>
+                            <h4 className="font-extrabold text-sm text-slate-900 leading-snug break-words">
+                              {item.name}
+                            </h4>
                           </div>
-                          <p className="text-xs text-slate-500 mt-0.5 font-medium">
-                            <span className="font-bold text-slate-800">₹{item.price}</span> • <span className="text-slate-400">{item.category_name || 'Item'}</span>
+                          <p className="text-xs text-slate-500 mt-1 font-medium pl-4">
+                            <span className="font-extrabold text-slate-800">₹{item.price}</span> • <span className="text-slate-400">{item.category_name || 'Item'}</span>
                           </p>
                         </div>
                       </div>
 
-                      <div className="flex items-center space-x-1.5 shrink-0">
+                      <div className="flex items-center justify-end space-x-1.5 pt-2.5 border-t border-slate-100/90 shrink-0">
+                        <button
+                          onClick={() => toggleSpecial(item.id)}
+                          className={`px-2.5 py-1.5 rounded-xl border transition-all text-xs font-bold flex items-center gap-1 active:scale-95 ${
+                            item.is_quick_item === 1
+                              ? 'bg-amber-100 hover:bg-amber-200 text-amber-900 border-amber-300 shadow-xs'
+                              : 'bg-slate-100 hover:bg-slate-200 text-slate-500 border-slate-200'
+                          }`}
+                          title={item.is_quick_item === 1 ? "Remove from Today's Specials" : "Set as Today's Special (shows on top for quick ordering)"}
+                        >
+                          <Star className={`w-3.5 h-3.5 ${item.is_quick_item === 1 ? 'fill-amber-500 text-amber-500' : 'text-slate-400'}`} />
+                          <span>{item.is_quick_item === 1 ? 'Special' : 'Make Special'}</span>
+                        </button>
+
                         <button
                           onClick={() => startEditItem(item)}
                           className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-orange-50 text-slate-700 hover:text-orange-700 border border-slate-200 transition-colors text-xs font-bold flex items-center gap-1 active:scale-95"
@@ -2040,8 +2341,104 @@ export default function OperatorConsole() {
               </div>
             )}
 
+            {/* PENDING WALLET TOP-UPS VERIFICATION BANNER (Option B) */}
+            {pendingWalletRecharges.length > 0 && (
+              <div className="bg-gradient-to-r from-teal-50 via-emerald-50 to-teal-50 rounded-3xl p-5 sm:p-6 border-2 border-emerald-400 shadow-sm space-y-4 animate-fade-in">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold shadow-sm">
+                      <Wallet className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="font-extrabold text-sm sm:text-base text-slate-900 flex items-center gap-2">
+                        <span>Pending Wallet Top-Ups Awaiting Verification</span>
+                        <span className="px-2 py-0.5 rounded-full text-xs font-black bg-emerald-400 text-slate-900 animate-pulse">
+                          {pendingWalletRecharges.length} New
+                        </span>
+                      </h3>
+                      <p className="text-xs text-slate-600">
+                        Customers submitted online UPI top-ups with 12-digit UTR. Verify in UPI app and confirm to credit wallet.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                  {pendingWalletRecharges.map((rec) => (
+                    <div
+                      key={rec.id}
+                      className="bg-white rounded-2xl p-4 border border-emerald-200 shadow-sm flex flex-col justify-between gap-3"
+                    >
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="font-extrabold text-sm text-slate-900">
+                            {rec.customer_name}
+                          </span>
+                          <span className="font-mono-code font-black text-base text-emerald-700">
+                            +₹{rec.amount}
+                          </span>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                          {rec.phone && <span>📞 {rec.phone}</span>}
+                          {rec.desk && (
+                            <span className="bg-teal-50 text-teal-700 px-2 py-0.5 rounded-md font-semibold border border-teal-100">
+                              🏢 {rec.desk}
+                            </span>
+                          )}
+                          <span>• Current Wallet: ₹{rec.wallet_balance || 0}</span>
+                        </div>
+
+                        {rec.utr && (
+                          <div className="bg-slate-50 p-2 rounded-xl border border-slate-200 flex items-center justify-between text-xs">
+                            <span className="text-slate-500 font-semibold">12-Digit UTR:</span>
+                            <span className="font-mono font-bold text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200">
+                              {rec.utr}
+                            </span>
+                          </div>
+                        )}
+
+                        <p className="text-[11px] text-slate-400 flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          <span>Submitted: {new Date(rec.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        </p>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+                        <button
+                          onClick={() => handleRejectWalletRecharge(rec.id)}
+                          className="py-2 px-3 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-700 text-xs font-bold transition-all border border-slate-200"
+                        >
+                          ✕ Reject
+                        </button>
+
+                        <button
+                          disabled={verifyingRechargeId === rec.id}
+                          onClick={() => handleVerifyWalletRecharge(rec.id)}
+                          className="py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-extrabold shadow-sm transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                        >
+                          {verifyingRechargeId === rec.id ? (
+                            <>
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                              <span>Crediting...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Check className="w-3.5 h-3.5" />
+                              <span>Verify & Credit ₹{rec.amount}</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Top Metric Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
                 <div>
                   <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
@@ -2056,6 +2453,23 @@ export default function OperatorConsole() {
                 </div>
                 <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shadow-inner">
                   <DollarSign className="w-6 h-6" />
+                </div>
+              </div>
+
+              <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
+                    Total Wallet Float
+                  </span>
+                  <span className="text-2xl sm:text-3xl font-black text-teal-700">
+                    ₹{creditAccounts.reduce((sum, a) => sum + (Number(a.wallet_balance) || 0), 0)}
+                  </span>
+                  <span className="text-[11px] text-teal-600/70 block mt-0.5 font-semibold">
+                    Prepaid balances held
+                  </span>
+                </div>
+                <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center shadow-inner">
+                  <Wallet className="w-6 h-6" />
                 </div>
               </div>
 
@@ -2225,6 +2639,7 @@ export default function OperatorConsole() {
                             <th className="py-3 px-4">2. Department</th>
                             <th className="py-3 px-4">3. Phone Number</th>
                             <th className="py-3 px-4 text-right">4. Due Amount</th>
+                            <th className="py-3 px-4 text-right">5. Wallet Balance</th>
                             <th className="py-3 px-4 text-center">Actions</th>
                           </tr>
                         </thead>
@@ -2268,8 +2683,27 @@ export default function OperatorConsole() {
                                     {hasDues ? `${acc.unpaid_orders_count || 0} unpaid` : 'Cleared'}
                                   </span>
                                 </td>
+                                <td className="py-3 px-4 text-right">
+                                  <span className="text-base font-black text-emerald-700">
+                                    ₹{acc.wallet_balance || 0}
+                                  </span>
+                                  <span className="block text-[10px] font-bold uppercase tracking-wider text-emerald-600">
+                                    Prepaid
+                                  </span>
+                                </td>
                                 <td className="py-3 px-4">
                                   <div className="flex items-center justify-center gap-1.5">
+                                    <button
+                                      onClick={() => {
+                                        setShowWalletTopupModal(acc);
+                                        setWalletTopupAmount('');
+                                      }}
+                                      className="py-1.5 px-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 active:scale-95 text-white text-xs font-bold shadow-xs transition-all flex items-center gap-1"
+                                      title="Counter Cashier Instant Wallet Recharge"
+                                    >
+                                      <Wallet className="w-3.5 h-3.5" />
+                                      <span>+ Top-Up</span>
+                                    </button>
                                     <button
                                       onClick={() => viewCustomerLedger(acc.customer_name)}
                                       className="py-1.5 px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all flex items-center gap-1"
@@ -2278,6 +2712,16 @@ export default function OperatorConsole() {
                                       <FileText className="w-3.5 h-3.5 text-indigo-600" />
                                       <span>Statement</span>
                                     </button>
+                                    {hasDues && (
+                                      <button
+                                        onClick={() => sendWhatsAppDueReminder({ account: acc, settings })}
+                                        className="py-1.5 px-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white text-xs font-bold shadow-xs transition-all flex items-center gap-1"
+                                        title="Send 1-Click WhatsApp payment reminder with UPI pay link"
+                                      >
+                                        <WhatsAppIcon className="w-3.5 h-3.5 fill-white" />
+                                        <span>Remind</span>
+                                      </button>
+                                    )}
                                     <button
                                       disabled={!hasDues}
                                       onClick={() => {
@@ -2342,32 +2786,65 @@ export default function OperatorConsole() {
                               </div>
                             </div>
 
+                            <div className="flex items-center justify-between text-xs bg-teal-50/60 p-2.5 rounded-xl border border-teal-100">
+                              <span className="font-bold text-teal-900 flex items-center gap-1">
+                                <Wallet className="w-3.5 h-3.5 text-teal-600" />
+                                <span>Prepaid Wallet:</span>
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono font-black text-emerald-700 text-sm">₹{acc.wallet_balance || 0}</span>
+                                <button
+                                  onClick={() => {
+                                    setShowWalletTopupModal(acc);
+                                    setWalletTopupAmount('');
+                                  }}
+                                  className="px-2 py-1 rounded-lg bg-teal-600 hover:bg-teal-700 active:scale-95 text-white font-bold text-[10px] transition-all flex items-center gap-0.5 shadow-xs"
+                                >
+                                  <Plus className="w-3 h-3" />
+                                  <span>Top-Up</span>
+                                </button>
+                              </div>
+                            </div>
+
                             {acc.notes && (
                               <p className="text-xs text-slate-500 bg-slate-50 p-2 rounded-xl border border-slate-100 italic">
                                 "{acc.notes}"
                               </p>
                             )}
 
-                            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
-                              <button
-                                onClick={() => viewCustomerLedger(acc.customer_name)}
-                                className="py-2 px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all flex items-center justify-center gap-1.5"
-                              >
-                                <FileText className="w-3.5 h-3.5 text-indigo-600" />
-                                <span>View Bill</span>
-                              </button>
+                            <div className="space-y-2 pt-2 border-t border-slate-100">
+                              <div className="grid grid-cols-2 gap-2">
+                                <button
+                                  onClick={() => viewCustomerLedger(acc.customer_name)}
+                                  className="py-2 px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+                                >
+                                  <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                                  <span>View Bill</span>
+                                </button>
 
-                              <button
-                                disabled={!hasDues}
-                                onClick={() => {
-                                  setShowSettleModal(acc);
-                                  setSettleAmount(String(acc.balance));
-                                }}
-                                className="py-2 px-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 disabled:opacity-40 disabled:pointer-events-none text-white text-xs font-bold shadow-sm transition-all flex items-center justify-center gap-1.5"
-                              >
-                                <CheckCircle className="w-3.5 h-3.5" />
-                                <span>Settle Bill</span>
-                              </button>
+                                <button
+                                  disabled={!hasDues}
+                                  onClick={() => {
+                                    setShowSettleModal(acc);
+                                    setSettleAmount(String(acc.balance));
+                                  }}
+                                  className="py-2 px-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 disabled:opacity-40 disabled:pointer-events-none text-white text-xs font-bold shadow-sm transition-all flex items-center justify-center gap-1.5"
+                                >
+                                  <CheckCircle className="w-3.5 h-3.5" />
+                                  <span>Settle Bill</span>
+                                </button>
+                              </div>
+
+                              {hasDues && (
+                                <button
+                                  onClick={() => sendWhatsAppDueReminder({ account: acc, settings })}
+                                  className="w-full py-2 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white text-xs font-extrabold shadow-xs transition-all flex items-center justify-center gap-1.5"
+                                  title="Send 1-Click WhatsApp payment reminder with UPI pay link"
+                                >
+                                  <WhatsAppIcon className="w-4 h-4 fill-white" />
+                                  <span>Send WhatsApp Reminder</span>
+                                </button>
+                              )}
                             </div>
                           </div>
                         );
@@ -2553,6 +3030,17 @@ export default function OperatorConsole() {
                 </div>
               </div>
             </div>
+
+            {/* Inconspicuous System Status & Hidden Reset Trigger */}
+            <div className="pt-4 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400 select-none">
+              <span 
+                onClick={handleSecretResetClick}
+                className="cursor-default hover:text-slate-500 transition-colors"
+              >
+                BMU Canteen OS • v1.0.0
+              </span>
+              <span>All Systems Operational</span>
+            </div>
           </div>
         )}
 
@@ -2657,7 +3145,7 @@ export default function OperatorConsole() {
             </div>
 
             {/* Daily Financial Summary Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
               <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm print:border print:p-3">
                 <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
                   Total Day Sales
@@ -2691,6 +3179,18 @@ export default function OperatorConsole() {
                 </span>
                 <span className="text-[10px] text-orange-600/70 block mt-0.5 font-semibold">
                   Direct Bank Transfers
+                </span>
+              </div>
+
+              <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm print:border print:p-3">
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                  👛 Wallet Sales
+                </span>
+                <span className="text-xl sm:text-2xl font-black text-teal-600 block mt-0.5">
+                  ₹{accountingData?.summary?.wallet_sales || 0}
+                </span>
+                <span className="text-[10px] text-teal-600/70 block mt-0.5 font-semibold">
+                  Prepaid Wallet Debits
                 </span>
               </div>
 
@@ -2812,6 +3312,7 @@ export default function OperatorConsole() {
                     <option value="ALL">All Payments</option>
                     <option value="CASH">💵 Cash</option>
                     <option value="UPI">⚡ UPI</option>
+                    <option value="WALLET">👛 BMU Wallet</option>
                     <option value="CREDIT">📋 Credit</option>
                   </select>
                 </div>
@@ -2882,13 +3383,15 @@ export default function OperatorConsole() {
                             </td>
                             <td className="py-2.5 px-3 text-center">
                               <span className={`inline-block px-2 py-0.5 rounded-md font-bold text-[10px] border ${
-                                o.payment_method === 'CASH'
+                                o.payment_method === 'WALLET'
+                                  ? 'bg-teal-50 text-teal-700 border-teal-200 font-black'
+                                  : o.payment_method === 'CASH'
                                   ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                   : o.payment_method === 'UPI'
                                   ? 'bg-orange-50 text-orange-700 border-orange-200'
                                   : 'bg-indigo-50 text-indigo-700 border-indigo-200'
                               }`}>
-                                {o.payment_method} • {o.payment_status}
+                                {o.payment_method === 'WALLET' ? '👛 WALLET' : o.payment_method} • {o.payment_status}
                               </span>
                             </td>
                             <td className="py-2.5 px-3 text-right font-mono font-black text-sm">
@@ -3021,27 +3524,15 @@ export default function OperatorConsole() {
                   </div>
                 </div>
 
-                {/* Emoji Selector */}
+                {/* Icon Emoji Selector */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                    Select Icon Emoji
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
+                    Dish Icon / Emoji
                   </label>
-                  <div className="flex flex-wrap gap-2">
-                    {['🍗', '🍳', '🌯', '🥪', '🍛', '🥘', '🍜', '🥟', '🥞', '☕', '🥤', '🍨', '🍱', '🍔', '🍕'].map(emoji => (
-                      <button
-                        key={emoji}
-                        type="button"
-                        onClick={() => setNewItem({ ...newItem, image_emoji: emoji })}
-                        className={`w-9 h-9 text-lg rounded-xl flex items-center justify-center transition-all ${
-                          newItem.image_emoji === emoji
-                            ? 'bg-orange-100 border-2 border-orange-500 scale-110 shadow-sm'
-                            : 'bg-slate-100 hover:bg-slate-200 border border-slate-200'
-                        }`}
-                      >
-                        {emoji}
-                      </button>
-                    ))}
-                  </div>
+                  <MenuIconPicker
+                    selectedEmoji={newItem.image_emoji}
+                    onSelectEmoji={(emoji) => setNewItem({ ...newItem, image_emoji: emoji })}
+                  />
                 </div>
 
                 <div>
@@ -3194,27 +3685,15 @@ export default function OperatorConsole() {
                   </div>
                 </div>
 
-                {/* Emoji Selector */}
+                {/* Icon Emoji Selector */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                    Select Icon Emoji
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
+                    Dish Icon / Emoji
                   </label>
-                  <div className="flex flex-wrap gap-2">
-                    {['🍲', '🍗', '🍳', '🌯', '🥪', '🍛', '🥘', '🍜', '🥟', '🥞', '☕', '🥤', '🍨', '🍱', '🍔', '🍕', '🥗', '🍩', '🍪'].map(emoji => (
-                      <button
-                        key={emoji}
-                        type="button"
-                        onClick={() => setEditItemForm({ ...editItemForm, image_emoji: emoji })}
-                        className={`w-9 h-9 text-lg rounded-xl flex items-center justify-center transition-all ${
-                          editItemForm.image_emoji === emoji
-                            ? 'bg-orange-100 border-2 border-orange-500 scale-110 shadow-sm'
-                            : 'bg-slate-100 hover:bg-slate-200 border border-slate-200'
-                        }`}
-                      >
-                        {emoji}
-                      </button>
-                    ))}
-                  </div>
+                  <MenuIconPicker
+                    selectedEmoji={editItemForm.image_emoji}
+                    onSelectEmoji={(emoji) => setEditItemForm({ ...editItemForm, image_emoji: emoji })}
+                  />
                 </div>
 
                 <div>
@@ -3309,11 +3788,23 @@ export default function OperatorConsole() {
                     {/* Summary Header */}
                     <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex flex-wrap items-center justify-between gap-4">
                       <div>
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Outstanding Balance</p>
-                        <p className={`text-2xl font-black ${ledgerDetail.account.balance > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                          ₹{ledgerDetail.account.balance}
-                        </p>
-                        <div className="flex flex-wrap items-center gap-3 mt-1.5 text-xs text-slate-600">
+                        <div className="flex items-center gap-5">
+                          <div>
+                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Outstanding Due</p>
+                            <p className={`text-2xl font-black ${ledgerDetail.account.balance > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                              ₹{ledgerDetail.account.balance}
+                            </p>
+                          </div>
+                          <div className="h-8 w-px bg-slate-200" />
+                          <div>
+                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Prepaid Wallet</p>
+                            <p className="text-2xl font-black text-teal-700">
+                              ₹{ledgerDetail.account.wallet_balance || 0}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-slate-600">
                           <span className="bg-indigo-50 text-indigo-700 px-2.5 py-0.5 rounded-md font-semibold border border-indigo-100">
                             🏢 Department: {ledgerDetail.account.department || ledgerDetail.account.desk || 'General'}
                           </span>
@@ -3325,18 +3816,47 @@ export default function OperatorConsole() {
                         </div>
                       </div>
 
-                      {ledgerDetail.account.balance > 0 && (
+                      <div className="flex flex-wrap items-center gap-2">
                         <button
                           onClick={() => {
-                            setShowSettleModal(ledgerDetail.account);
-                            setSettleAmount(String(ledgerDetail.account.balance));
+                            setShowWalletTopupModal(ledgerDetail.account);
+                            setWalletTopupAmount('');
                           }}
-                          className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all flex items-center gap-1.5"
+                          className="px-4 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 active:scale-95 text-white font-bold text-xs shadow-md shadow-teal-600/20 transition-all flex items-center gap-1.5"
+                          title="Instant Counter Wallet Top-Up"
                         >
-                          <CreditCard className="w-4 h-4" />
-                          <span>Settle Dues (₹{ledgerDetail.account.balance})</span>
+                          <Wallet className="w-4 h-4" />
+                          <span>+ Top-Up Wallet</span>
                         </button>
-                      )}
+
+                        {ledgerDetail.account.balance > 0 && (
+                          <>
+                            <button
+                              onClick={() => sendWhatsAppDueReminder({ 
+                                account: ledgerDetail.account, 
+                                orders: ledgerDetail.orders, 
+                                settings 
+                              })}
+                              className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white font-bold text-xs shadow-md shadow-emerald-500/20 transition-all flex items-center gap-1.5"
+                              title="Send itemized statement and UPI payment link via WhatsApp"
+                            >
+                              <WhatsAppIcon className="w-4 h-4 fill-white" />
+                              <span>WhatsApp Statement & UPI</span>
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                setShowSettleModal(ledgerDetail.account);
+                                setSettleAmount(String(ledgerDetail.account.balance));
+                              }}
+                              className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition-all flex items-center gap-1.5"
+                            >
+                              <CreditCard className="w-4 h-4" />
+                              <span>Settle Dues (₹{ledgerDetail.account.balance})</span>
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
 
                     {/* Credit Orders Section: Itemized with Date, Description, Quantity, Price */}
@@ -4177,6 +4697,314 @@ export default function OperatorConsole() {
                   Cancel
                 </button>
               </div>
+
+            </div>
+          </div>
+        )}
+
+        {/* Fast-POS Wallet Customer Select Modal */}
+        {showWalletCustomerModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+            <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden border border-slate-100 max-h-[90vh] flex flex-col">
+              
+              {/* Header */}
+              <div className="bg-gradient-to-r from-teal-900 via-teal-800 to-slate-900 px-6 py-4 text-white flex items-center justify-between shrink-0">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 rounded-2xl bg-teal-500/20 border border-teal-400/30 flex items-center justify-center text-teal-300">
+                    <Wallet className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-base tracking-tight">Select Wallet Customer</h3>
+                    <p className="text-xs text-teal-200">
+                      Debit Bill Amount <span className="font-black text-white">₹{posTotal}</span> from Prepaid Wallet
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowWalletCustomerModal(false)}
+                  className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="p-6 space-y-4 overflow-y-auto flex-1">
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Search Customer (Name or Mobile)
+                  </label>
+                  <div className="relative">
+                    <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      autoFocus
+                      placeholder="Type customer name or 10-digit mobile..."
+                      value={walletCustomerSearch}
+                      onChange={(e) => setWalletCustomerSearch(e.target.value)}
+                      className="w-full pl-10 pr-10 py-2.5 rounded-2xl border border-slate-200 text-sm font-semibold focus:ring-2 focus:ring-teal-500 focus:outline-none bg-slate-50/50"
+                    />
+                    {walletCustomerSearch && (
+                      <button
+                        onClick={() => setWalletCustomerSearch('')}
+                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between text-xs text-slate-500">
+                    <span>Registered Customers ({matchingWalletCustomers.length})</span>
+                  </div>
+
+                  {matchingWalletCustomers.length === 0 ? (
+                    <div className="p-5 rounded-2xl bg-amber-50 border border-amber-200 text-center space-y-2">
+                      <p className="text-xs font-bold text-amber-900">
+                        No customer found matching "{walletCustomerSearch}"
+                      </p>
+                      <p className="text-[11px] text-amber-700">
+                        Register the customer in the Credit & Wallet tab to create a prepaid wallet.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                      {matchingWalletCustomers.map(acc => {
+                        const balance = Number(acc.wallet_balance) || 0;
+                        const hasEnough = balance >= posTotal;
+                        return (
+                          <div
+                            key={acc.id}
+                            className="p-3.5 rounded-2xl border border-slate-200 hover:border-teal-400 hover:bg-teal-50/40 transition-all flex items-center justify-between gap-3 shadow-xs bg-white"
+                          >
+                            <div className="min-w-0">
+                              <h4 className="font-extrabold text-sm text-slate-900 truncate">
+                                {acc.customer_name}
+                              </h4>
+                              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 mt-1">
+                                <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-semibold text-[11px]">
+                                  🏢 {acc.department || acc.desk || 'General'}
+                                </span>
+                                {acc.phone && (
+                                  <span className="font-mono text-[11px] text-slate-600">
+                                    📞 {acc.phone}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[11px] font-bold mt-1 text-slate-600">
+                                Wallet Balance: <span className={balance >= posTotal ? 'text-emerald-700 font-black' : 'text-rose-600 font-bold'}>₹{balance}</span>
+                                {!hasEnough && <span className="text-rose-600 ml-1">(Shortage ₹{posTotal - balance})</span>}
+                              </p>
+                            </div>
+
+                            <div className="flex flex-col items-end gap-1 shrink-0">
+                              <button
+                                type="button"
+                                disabled={posSubmitting || !hasEnough}
+                                onClick={() => handleSelectCustomerForWallet(acc)}
+                                className="px-3.5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-xs shadow-sm transition-all flex items-center gap-1"
+                              >
+                                <Wallet className="w-3.5 h-3.5" />
+                                <span>{hasEnough ? `Debit ₹${posTotal}` : 'Shortage'}</span>
+                              </button>
+                              {!hasEnough && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setShowWalletTopupModal(acc);
+                                    setWalletTopupAmount(String(posTotal - balance));
+                                  }}
+                                  className="text-[11px] font-bold text-teal-700 hover:text-teal-900 underline"
+                                >
+                                  + Top-Up ₹{posTotal - balance}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="bg-slate-50 px-6 py-3 border-t border-slate-200 flex justify-between items-center shrink-0">
+                <span className="text-xs text-slate-500">
+                  Bill Amount: <strong className="text-slate-900">₹{posTotal}</strong>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowWalletCustomerModal(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+
+            </div>
+          </div>
+        )}
+
+        {/* Cashier Counter Wallet Top-Up Modal */}
+        {showWalletTopupModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+            <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden border border-slate-100">
+              
+              {/* Header */}
+              <div className="bg-gradient-to-r from-teal-800 via-emerald-800 to-teal-900 px-6 py-4 text-white flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center text-white">
+                    <Wallet className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-base">Recharge Prepaid Wallet</h3>
+                    <p className="text-xs text-emerald-200">Instant counter cashier top-up</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowWalletTopupModal(null)}
+                  className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <form onSubmit={handleWalletTopupSubmit} className="p-6 space-y-4">
+                {/* Customer Info Card */}
+                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 flex items-center justify-between">
+                  <div>
+                    <p className="font-extrabold text-sm text-slate-900">{showWalletTopupModal.customer_name}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {showWalletTopupModal.department || showWalletTopupModal.desk || 'General'}
+                      {showWalletTopupModal.phone ? ` • ${showWalletTopupModal.phone}` : ''}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase block">Current Wallet</span>
+                    <span className="text-base font-black text-emerald-700">₹{showWalletTopupModal.wallet_balance || 0}</span>
+                  </div>
+                </div>
+
+                {/* Quick Top-Up Preset Pills */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
+                    Quick Amounts
+                  </label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {[100, 200, 500, 1000].map(amt => (
+                      <button
+                        key={amt}
+                        type="button"
+                        onClick={() => setWalletTopupAmount(String(amt))}
+                        className={`py-2 rounded-xl text-xs font-black transition-all border ${
+                          String(walletTopupAmount) === String(amt)
+                            ? 'bg-teal-600 text-white border-teal-600 shadow-sm'
+                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        +₹{amt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Amount Input */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    Recharge Amount (₹) *
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-bold text-slate-400">₹</span>
+                    <input
+                      type="number"
+                      required
+                      min="1"
+                      step="1"
+                      autoFocus
+                      placeholder="e.g. 500"
+                      value={walletTopupAmount}
+                      onChange={(e) => setWalletTopupAmount(e.target.value)}
+                      className="w-full pl-8 pr-4 py-2.5 rounded-xl border border-slate-200 text-base font-black text-slate-900 focus:ring-2 focus:ring-teal-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Payment Method Received */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    Money Received Via *
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setWalletTopupMethod('CASH')}
+                      className={`py-2 px-3 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-1.5 ${
+                        walletTopupMethod === 'CASH'
+                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      <span>💵 Cash at Counter</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setWalletTopupMethod('UPI')}
+                      className={`py-2 px-3 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-1.5 ${
+                        walletTopupMethod === 'UPI'
+                          ? 'bg-orange-500 text-white border-orange-500 shadow-sm'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      <span>⚡ Counter UPI</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Notes */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    Notes / Remarks (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Received cash at counter 1"
+                    value={walletTopupNotes}
+                    onChange={(e) => setWalletTopupNotes(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-teal-500 focus:outline-none"
+                  />
+                </div>
+
+                {/* Submit Buttons */}
+                <div className="pt-2 flex items-center justify-end space-x-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setShowWalletTopupModal(null)}
+                    className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-100 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={walletTopupSubmitting || !walletTopupAmount || parseFloat(walletTopupAmount) <= 0}
+                    className="px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 active:scale-95 disabled:opacity-50 text-white font-extrabold text-xs shadow-md shadow-teal-600/20 transition-all flex items-center gap-1.5"
+                  >
+                    {walletTopupSubmitting ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>Crediting...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4" />
+                        <span>Credit ₹{walletTopupAmount || 0} to Wallet</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
 
             </div>
           </div>
