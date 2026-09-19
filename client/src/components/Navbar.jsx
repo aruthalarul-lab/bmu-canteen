@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Utensils, Monitor, LayoutDashboard, ShoppingBag, Radio, QrCode, X, Copy, Check, CreditCard, Wallet } from 'lucide-react';
+import { Utensils, Monitor, LayoutDashboard, ShoppingBag, Radio, QrCode, X, Copy, Check, Wallet } from 'lucide-react';
 import CustomerCreditModal from './CustomerCreditModal';
 
 export default function Navbar({ currentView, setView, cartCount, setIsCartOpen, isConnected }) {
@@ -87,20 +87,6 @@ export default function Navbar({ currentView, setView, cartCount, setIsCartOpen,
                 >
                   <Wallet className="w-4 h-4 text-emerald-600 shrink-0" />
                   <span className="hidden sm:inline">Wallet</span>
-                </button>
-
-                {/* Credit Dues Button */}
-                <button
-                  onClick={() => {
-                    setCreditModalTab('credit');
-                    setShowCreditModal(true);
-                  }}
-                  className="flex items-center space-x-1 px-2 py-1.5 sm:px-2.5 sm:py-1.5 rounded-lg text-slate-700 hover:text-slate-900 hover:bg-slate-200/60 transition-all font-semibold"
-                  title="Staff & Student Credit Dues"
-                >
-                  <CreditCard className="w-4 h-4 text-orange-600 shrink-0" />
-                  <span className="hidden sm:inline">Credit Dues</span>
-                  <span className="sm:hidden text-xs font-bold">Dues</span>
                 </button>
 
                 {/* If currently in Operator mode, show active badge; otherwise show discreet staff lock */}
