@@ -505,9 +505,12 @@ async function runTests() {
       'Customer ledger statement reports order status CANCELLED and payment_status CANCELLED');
 
     // ==========================================
-    // SUITE 13: PREPAID CANTEEN WALLET OPERATIONS
+    // SUITE 13: PREPAID CANTEEN WALLET OPERATIONS (OPTION B)
     // ==========================================
-    console.log('\n--- SUITE 13: Prepaid Canteen Wallet Operations ---');
+    console.log('\n--- SUITE 13: Prepaid Canteen Wallet Operations (Option B: Cashier Approval) ---');
+
+    // 0. Ensure Option B mode is active for Suite 13
+    await request('POST', '/api/settings', { wallet_recharge_mode: 'option_b' }, { 'x-operator-pin': TEST_PIN });
 
     // 1. Operator counter instant top-up (Cash)
     const counterTopupRes = await request('POST', '/api/wallet/topup', {
@@ -592,6 +595,82 @@ async function runTests() {
       'Cancelled wallet order automatically refunded back to wallet (680 + 120 = 800)');
     assert(passbookAfterRefund.body.transactions.some(t => t.type === 'REFUND' && t.amount === 120),
       'Wallet passbook logs REFUND transaction with order details');
+
+    // ==========================================
+    // SUITE 14: OPTION A (INSTANT SELF-CREDIT WITH UTR & REVERSAL)
+    // ==========================================
+    console.log('\n--- SUITE 14: Option A (Instant Self-Credit with UTR & Background Reversal) ---');
+
+    // 1. Configure settings to Option A
+    const setOptionARes = await request('POST', '/api/settings', { wallet_recharge_mode: 'option_a' }, { 'x-operator-pin': TEST_PIN });
+    assert(setOptionARes.status === 200 && setOptionARes.body.wallet_recharge_mode === 'option_a',
+      'Operator successfully switches wallet processing mode to Option A (Instant Self-Credit)');
+
+    // 2. Customer submits online recharge with 12-digit UTR
+    const instantRechargeRes = await request('POST', '/api/wallet/customer-recharge', {
+      customer_name: 'Rahul Instant',
+      phone: '9876500001',
+      department: 'CSE Dept',
+      amount: 400,
+      utr: 'UTR1122334455',
+      notes: 'GPay Fast Recharge'
+    });
+    assert(instantRechargeRes.status === 200 && 
+           instantRechargeRes.body.status === 'INSTANT_CREDIT' && 
+           instantRechargeRes.body.mode === 'OPTION_A' &&
+           instantRechargeRes.body.new_wallet_balance === 400,
+      'Option A: Wallet is credited INSTANTLY upon UTR submission without waiting for cashier');
+    const instantTxId = instantRechargeRes.body.transaction_id;
+
+    // 3. Customer immediately places order using self-credited wallet balance
+    const instantOrderRes = await request('POST', '/api/orders', {
+      customer_name: 'Rahul Instant',
+      customer_desk: 'Lab 3',
+      customer_phone: '9876500001',
+      order_type: 'ONLINE',
+      payment_method: 'WALLET',
+      items: [{ menu_item_id: 1, quantity: 1 }] // 1 * 60 = 60
+    });
+    assert(instantOrderRes.status === 201 && instantOrderRes.body.payment_status === 'PAID',
+      'Option A: Customer can immediately place 1-tap food orders with self-credited wallet funds');
+
+    // 4. Verify wallet balance deducted correctly (400 - 60 = 340)
+    const passbookInstant = await request('GET', `/api/wallet/passbook/${encodeURIComponent('Rahul Instant')}`);
+    assert(passbookInstant.status === 200 && passbookInstant.body.account.wallet_balance === 340,
+      'Option A: Balance correctly updates to reflect immediate order placement (400 - 60 = 340)');
+
+    // 5. Cashier views pending/auditable list and verifies Option A recharge is visible
+    const pendingAuditRes = await request('GET', '/api/wallet/pending-recharges', null, { 'x-operator-pin': TEST_PIN });
+    assert(pendingAuditRes.status === 200 && pendingAuditRes.body.some(r => r.id === instantTxId && r.status === 'INSTANT_CREDIT'),
+      'Option A: Pending review list flags self-credited top-ups for cashier background audit');
+
+    // 6. Cashier marks the valid recharge as Audited (VERIFIED)
+    const auditRes = await request('POST', `/api/wallet/recharges/${instantTxId}/verify`, {}, { 'x-operator-pin': TEST_PIN });
+    assert(auditRes.status === 200 && auditRes.body.new_wallet_balance === 340,
+      'Option A: Cashier auditing marks transaction VERIFIED without double crediting funds');
+
+    // 7. Fraudulent top-up test: Customer submits invalid/fake UTR
+    const fakeRechargeRes = await request('POST', '/api/wallet/customer-recharge', {
+      customer_name: 'Rahul Instant',
+      phone: '9876500001',
+      department: 'CSE Dept',
+      amount: 200,
+      utr: 'FAKEUTR999999',
+      notes: 'Fake payment attempt'
+    });
+    assert(fakeRechargeRes.status === 200 && fakeRechargeRes.body.new_wallet_balance === 540,
+      'Option A: Fake top-up initially adds +200 to wallet (340 + 200 = 540)');
+    const fakeTxId = fakeRechargeRes.body.transaction_id;
+
+    // 8. Cashier identifies fraudulent UTR and clicks Revert Balance
+    const revertRes = await request('POST', `/api/wallet/recharges/${fakeTxId}/reject`, {}, { 'x-operator-pin': TEST_PIN });
+    assert(revertRes.status === 200 && revertRes.body.new_wallet_balance === 340,
+      'Option A: Cashier rejection atomically REVERTS fraudulent credit back from wallet balance');
+
+    // 9. Verify passbook contains ADJUSTMENT record
+    const passbookReverted = await request('GET', `/api/wallet/passbook/${encodeURIComponent('Rahul Instant')}`);
+    assert(passbookReverted.body.transactions.some(t => t.type === 'ADJUSTMENT' && t.amount === -200),
+      'Option A: Wallet ledger records transparent negative ADJUSTMENT entry upon balance reversal');
 
   } finally {
     serverProcess.kill();

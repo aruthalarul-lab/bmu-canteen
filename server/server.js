@@ -1388,7 +1388,7 @@ app.post('/api/wallet/topup', requireOperatorAuth, (req, res) => {
   });
 });
 
-// POST /api/wallet/customer-recharge - Customer online UPI recharge request (Option B: status = 'PENDING')
+// POST /api/wallet/customer-recharge - Customer online UPI recharge request (Option A: Instant Self-Credit / Option B: Pending Approval)
 app.post('/api/wallet/customer-recharge', (req, res) => {
   const { customer_name, phone, department, amount, utr, notes } = req.body;
   const rechargeAmount = parseFloat(amount);
@@ -1429,52 +1429,121 @@ app.post('/api/wallet/customer-recharge', (req, res) => {
     accountId = resAcc.lastInsertRowid;
   }
 
-  const finalNotes = notes ? notes.trim() : `Customer UPI Recharge (UTR: ${cleanUtr})`;
+  // Determine recharge mode: 'option_a' (Instant Self-Credit) vs 'option_b' (Cashier Approval First)
+  const currentSettings = getSettingsObj();
+  const rechargeMode = (currentSettings.wallet_recharge_mode || 'option_a').toLowerCase();
+  const isOptionA = rechargeMode === 'option_a';
 
-  const resTx = db.prepare(`
-    INSERT INTO wallet_transactions (account_id, customer_name, customer_phone, type, amount, balance_after, payment_method, utr, status, notes)
-    VALUES (?, ?, ?, 'RECHARGE', ?, ?, 'UPI', ?, 'PENDING', ?)
-  `).run(accountId, cleanName, cleanPhone, rechargeAmount, currentWalletBal, cleanUtr, finalNotes);
+  const finalNotes = notes ? notes.trim() : (isOptionA ? `Customer UPI Instant Self-Credit (UTR: ${cleanUtr})` : `Customer UPI Recharge (UTR: ${cleanUtr})`);
 
-  const transactionId = resTx.lastInsertRowid;
+  let transactionId;
+  let newWalletBal = currentWalletBal;
 
-  // Real-time broadcast to Operator Console
-  io.emit('wallet-recharge-submitted', {
-    id: transactionId,
-    customer_name: cleanName,
-    phone: cleanPhone,
-    department: cleanDept,
-    amount: rechargeAmount,
-    utr: cleanUtr,
-    current_wallet_balance: currentWalletBal,
-    created_at: new Date().toISOString()
-  });
+  if (isOptionA) {
+    // Option A: Atomically credit customer wallet balance immediately
+    const instantCreditTx = db.transaction(() => {
+      newWalletBal = currentWalletBal + rechargeAmount;
+      db.prepare(`
+        UPDATE credit_accounts 
+        SET wallet_balance = ?, updated_at = CURRENT_TIMESTAMP 
+        WHERE id = ?
+      `).run(newWalletBal, accountId);
 
-  res.json({
-    success: true,
-    status: 'PENDING',
-    transaction_id: transactionId,
-    message: 'Recharge request submitted! Awaiting cashier confirmation.',
-    customer_name: cleanName,
-    amount: rechargeAmount,
-    current_wallet_balance: currentWalletBal,
-    utr: cleanUtr
-  });
+      const resTx = db.prepare(`
+        INSERT INTO wallet_transactions (account_id, customer_name, customer_phone, type, amount, balance_after, payment_method, utr, status, notes)
+        VALUES (?, ?, ?, 'RECHARGE', ?, ?, 'UPI', ?, 'INSTANT_CREDIT', ?)
+      `).run(accountId, cleanName, cleanPhone, rechargeAmount, newWalletBal, cleanUtr, finalNotes);
+
+      return resTx.lastInsertRowid;
+    });
+
+    transactionId = instantCreditTx();
+
+    // Broadcast instant socket events
+    io.emit('wallet-recharge-submitted', {
+      id: transactionId,
+      customer_name: cleanName,
+      phone: cleanPhone,
+      department: cleanDept,
+      amount: rechargeAmount,
+      utr: cleanUtr,
+      mode: 'OPTION_A',
+      status: 'INSTANT_CREDIT',
+      current_wallet_balance: newWalletBal,
+      created_at: new Date().toISOString()
+    });
+    io.emit('wallet-recharge-instant', {
+      id: transactionId,
+      customer_name: cleanName,
+      amount: rechargeAmount,
+      utr: cleanUtr,
+      new_wallet_balance: newWalletBal
+    });
+    io.emit('wallet-updated', { customer_name: cleanName, wallet_balance: newWalletBal });
+    io.emit('credit-updated', { customer_name: cleanName });
+
+    return res.json({
+      success: true,
+      mode: 'OPTION_A',
+      status: 'INSTANT_CREDIT',
+      transaction_id: transactionId,
+      message: 'Wallet credited instantly! Ready for 1-tap checkout.',
+      customer_name: cleanName,
+      amount: rechargeAmount,
+      new_wallet_balance: newWalletBal,
+      current_wallet_balance: newWalletBal,
+      utr: cleanUtr
+    });
+  } else {
+    // Option B: Record transaction as PENDING awaiting cashier verification
+    const resTx = db.prepare(`
+      INSERT INTO wallet_transactions (account_id, customer_name, customer_phone, type, amount, balance_after, payment_method, utr, status, notes)
+      VALUES (?, ?, ?, 'RECHARGE', ?, ?, 'UPI', ?, 'PENDING', ?)
+    `).run(accountId, cleanName, cleanPhone, rechargeAmount, currentWalletBal, cleanUtr, finalNotes);
+
+    transactionId = resTx.lastInsertRowid;
+
+    // Real-time broadcast to Operator Console
+    io.emit('wallet-recharge-submitted', {
+      id: transactionId,
+      customer_name: cleanName,
+      phone: cleanPhone,
+      department: cleanDept,
+      amount: rechargeAmount,
+      utr: cleanUtr,
+      mode: 'OPTION_B',
+      status: 'PENDING',
+      current_wallet_balance: currentWalletBal,
+      created_at: new Date().toISOString()
+    });
+
+    return res.json({
+      success: true,
+      mode: 'OPTION_B',
+      status: 'PENDING',
+      transaction_id: transactionId,
+      message: 'Recharge request submitted! Awaiting cashier confirmation.',
+      customer_name: cleanName,
+      amount: rechargeAmount,
+      current_wallet_balance: currentWalletBal,
+      utr: cleanUtr
+    });
+  }
 });
 
-// GET /api/wallet/pending-recharges - List all pending customer wallet recharges for cashier verification (Requires Operator Auth)
+// GET /api/wallet/pending-recharges - List all pending / auditable customer wallet recharges (Requires Operator Auth)
 app.get('/api/wallet/pending-recharges', requireOperatorAuth, (req, res) => {
   const pending = db.prepare(`
     SELECT wt.*, ca.department, ca.balance as credit_dues, ca.wallet_balance as current_wallet_balance
     FROM wallet_transactions wt
     LEFT JOIN credit_accounts ca ON wt.account_id = ca.id OR LOWER(wt.customer_name) = LOWER(ca.customer_name)
-    WHERE wt.type = 'RECHARGE' AND wt.status = 'PENDING'
+    WHERE wt.type = 'RECHARGE' AND wt.status IN ('PENDING', 'INSTANT_CREDIT')
     ORDER BY wt.id DESC
   `).all();
   res.json(pending);
 });
 
-// POST /api/wallet/recharges/:id/verify - Cashier approves customer wallet recharge (Requires Operator Auth)
+// POST /api/wallet/recharges/:id/verify - Cashier approves / audits customer wallet recharge (Requires Operator Auth)
 app.post('/api/wallet/recharges/:id/verify', requireOperatorAuth, (req, res) => {
   const rechargeId = parseInt(req.params.id);
   const txRecord = db.prepare('SELECT * FROM wallet_transactions WHERE id = ?').get(rechargeId);
@@ -1496,38 +1565,49 @@ app.post('/api/wallet/recharges/:id/verify', requireOperatorAuth, (req, res) => 
     return res.status(404).json({ error: 'Customer account not found' });
   }
 
-  const verifyTx = db.transaction(() => {
-    const newWalletBal = (account.wallet_balance || 0) + txRecord.amount;
-    db.prepare(`
-      UPDATE credit_accounts 
-      SET wallet_balance = ?, updated_at = CURRENT_TIMESTAMP 
-      WHERE id = ?
-    `).run(newWalletBal, account.id);
+  let newWalletBal;
+  if (txRecord.status === 'INSTANT_CREDIT') {
+    // Option A: Funds were already self-credited upon submission! Mark as VERIFIED (Audited)
+    db.prepare("UPDATE wallet_transactions SET status = 'VERIFIED' WHERE id = ?").run(rechargeId);
+    newWalletBal = account.wallet_balance || 0;
+  } else {
+    // Option B: PENDING - Cashier confirms receipt and credits wallet now
+    const verifyTx = db.transaction(() => {
+      const updatedBal = (account.wallet_balance || 0) + txRecord.amount;
+      db.prepare(`
+        UPDATE credit_accounts 
+        SET wallet_balance = ?, updated_at = CURRENT_TIMESTAMP 
+        WHERE id = ?
+      `).run(updatedBal, account.id);
 
-    db.prepare(`
-      UPDATE wallet_transactions 
-      SET status = 'VERIFIED', balance_after = ? 
-      WHERE id = ?
-    `).run(newWalletBal, rechargeId);
+      db.prepare(`
+        UPDATE wallet_transactions 
+        SET status = 'VERIFIED', balance_after = ? 
+        WHERE id = ?
+      `).run(updatedBal, rechargeId);
 
-    return newWalletBal;
-  });
+      return updatedBal;
+    });
 
-  const newWalletBal = verifyTx();
+    newWalletBal = verifyTx();
+  }
 
   io.emit('wallet-recharge-verified', {
     transaction_id: rechargeId,
     customer_name: account.customer_name,
     amount: txRecord.amount,
     new_wallet_balance: newWalletBal,
-    utr: txRecord.utr
+    utr: txRecord.utr,
+    was_instant: txRecord.status === 'INSTANT_CREDIT'
   });
   io.emit('wallet-updated', { customer_name: account.customer_name, wallet_balance: newWalletBal });
   io.emit('credit-updated', { customer_name: account.customer_name });
 
   res.json({
     success: true,
-    message: 'Recharge verified and wallet credited successfully',
+    message: txRecord.status === 'INSTANT_CREDIT' 
+      ? 'Instant recharge audited and verified' 
+      : 'Recharge verified and wallet credited successfully',
     transaction_id: rechargeId,
     customer_name: account.customer_name,
     amount: txRecord.amount,
@@ -1536,7 +1616,7 @@ app.post('/api/wallet/recharges/:id/verify', requireOperatorAuth, (req, res) => 
   });
 });
 
-// POST /api/wallet/recharges/:id/reject - Cashier rejects invalid customer wallet recharge (Requires Operator Auth)
+// POST /api/wallet/recharges/:id/reject - Cashier rejects invalid recharge or reverts fraudulent instant credit (Requires Operator Auth)
 app.post('/api/wallet/recharges/:id/reject', requireOperatorAuth, (req, res) => {
   const rechargeId = parseInt(req.params.id);
   const txRecord = db.prepare('SELECT * FROM wallet_transactions WHERE id = ?').get(rechargeId);
@@ -1544,18 +1624,60 @@ app.post('/api/wallet/recharges/:id/reject', requireOperatorAuth, (req, res) => 
     return res.status(404).json({ error: 'Recharge transaction not found' });
   }
 
-  db.prepare("UPDATE wallet_transactions SET status = 'REJECTED' WHERE id = ?").run(rechargeId);
+  let account = null;
+  if (txRecord.account_id) {
+    account = db.prepare('SELECT * FROM credit_accounts WHERE id = ?').get(txRecord.account_id);
+  }
+  if (!account) {
+    account = db.prepare('SELECT * FROM credit_accounts WHERE LOWER(customer_name) = LOWER(?)').get(txRecord.customer_name);
+  }
+
+  let newWalletBal = account ? (account.wallet_balance || 0) : 0;
+
+  if (txRecord.status === 'INSTANT_CREDIT' && account) {
+    // Option A: Revert fraudulent / invalid self-credit
+    const revertTx = db.transaction(() => {
+      newWalletBal = Math.max(0, (account.wallet_balance || 0) - txRecord.amount);
+      db.prepare(`
+        UPDATE credit_accounts 
+        SET wallet_balance = ?, updated_at = CURRENT_TIMESTAMP 
+        WHERE id = ?
+      `).run(newWalletBal, account.id);
+
+      db.prepare(`
+        UPDATE wallet_transactions 
+        SET status = 'REJECTED', notes = notes || ' [REVERTED BY OPERATOR]' 
+        WHERE id = ?
+      `).run(rechargeId);
+
+      // Record reversal entry in wallet ledger for transparent passbook audit
+      db.prepare(`
+        INSERT INTO wallet_transactions (account_id, customer_name, customer_phone, type, amount, balance_after, payment_method, utr, status, notes)
+        VALUES (?, ?, ?, 'ADJUSTMENT', ?, ?, 'SYSTEM', ?, 'VERIFIED', ?)
+      `).run(account.id, account.customer_name, account.phone || '', -txRecord.amount, newWalletBal, txRecord.utr || '', `Reversal of Invalid UTR: ${txRecord.utr || ''}`);
+    });
+
+    revertTx();
+  } else {
+    db.prepare("UPDATE wallet_transactions SET status = 'REJECTED' WHERE id = ?").run(rechargeId);
+  }
 
   io.emit('wallet-recharge-rejected', {
     transaction_id: rechargeId,
-    customer_name: txRecord.customer_name
+    customer_name: txRecord.customer_name,
+    was_instant: txRecord.status === 'INSTANT_CREDIT',
+    new_wallet_balance: newWalletBal
   });
-  io.emit('wallet-updated', { customer_name: txRecord.customer_name });
+  io.emit('wallet-updated', { customer_name: txRecord.customer_name, wallet_balance: newWalletBal });
+  io.emit('credit-updated', { customer_name: txRecord.customer_name });
 
   res.json({
     success: true,
-    message: 'Recharge rejected',
-    transaction_id: rechargeId
+    message: txRecord.status === 'INSTANT_CREDIT' 
+      ? 'Instant recharge rejected and credited balance reverted' 
+      : 'Recharge rejected',
+    transaction_id: rechargeId,
+    new_wallet_balance: newWalletBal
   });
 });
 

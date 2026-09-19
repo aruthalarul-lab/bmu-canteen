@@ -184,6 +184,7 @@ function initDb() {
   insertSetting.run('upi_name', 'BMU Office Canteen');
   insertSetting.run('is_open', '1');
   insertSetting.run('operator_pin', '1513');
+  insertSetting.run('wallet_recharge_mode', 'option_a');
   db.prepare("UPDATE settings SET value = '1513' WHERE key = 'operator_pin' AND value = '1234'").run();
 
   // Seed categories if empty

@@ -37,6 +37,7 @@ export default function OperatorConsole() {
     upi_id: 'bmucanteen@upi',
     upi_name: 'BMU Office Canteen',
     operator_pin: '1513',
+    wallet_recharge_mode: 'option_a',
   });
   const [settingsSaving, setSettingsSaving] = useState(false);
 
@@ -389,8 +390,11 @@ export default function OperatorConsole() {
     }
   };
 
-  const handleRejectWalletRecharge = async (rechargeId) => {
-    if (!confirm('Are you sure you want to decline/reject this wallet recharge? The customer will be informed.')) return;
+  const handleRejectWalletRecharge = async (rechargeId, isInstant = false, amount = 0, customerName = '') => {
+    const confirmMsg = isInstant
+      ? `⚠️ REVERT WALLET BALANCE CONFIRMATION:\n\nCustomer "${customerName}" was already self-credited ₹${amount} via Option A.\n\nRejecting will REVERT and DEDUCT ₹${amount} from their wallet balance.\n\nDo you want to proceed with reversing this credit?`
+      : 'Are you sure you want to decline/reject this wallet recharge? The customer will be informed.';
+    if (!confirm(confirmMsg)) return;
     try {
       const res = await operatorFetch(`/api/wallet/recharges/${rechargeId}/reject`, {
         method: 'POST'
@@ -2341,7 +2345,7 @@ export default function OperatorConsole() {
               </div>
             )}
 
-            {/* PENDING WALLET TOP-UPS VERIFICATION BANNER (Option B) */}
+            {/* PENDING / AUDITABLE WALLET TOP-UPS BANNER (Option A & Option B) */}
             {pendingWalletRecharges.length > 0 && (
               <div className="bg-gradient-to-r from-teal-50 via-emerald-50 to-teal-50 rounded-3xl p-5 sm:p-6 border-2 border-emerald-400 shadow-sm space-y-4 animate-fade-in">
                 <div className="flex items-center justify-between">
@@ -2351,88 +2355,111 @@ export default function OperatorConsole() {
                     </div>
                     <div>
                       <h3 className="font-extrabold text-sm sm:text-base text-slate-900 flex items-center gap-2">
-                        <span>Pending Wallet Top-Ups Awaiting Verification</span>
+                        <span>Wallet Top-Ups Awaiting Cashier Audit</span>
                         <span className="px-2 py-0.5 rounded-full text-xs font-black bg-emerald-400 text-slate-900 animate-pulse">
                           {pendingWalletRecharges.length} New
                         </span>
                       </h3>
                       <p className="text-xs text-slate-600">
-                        Customers submitted online UPI top-ups with 12-digit UTR. Verify in UPI app and confirm to credit wallet.
+                        Review customer UPI top-ups with 12-digit UTR. Option A top-ups are already self-credited (audit or revert if fake). Option B top-ups await your approval.
                       </p>
                     </div>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-                  {pendingWalletRecharges.map((rec) => (
-                    <div
-                      key={rec.id}
-                      className="bg-white rounded-2xl p-4 border border-emerald-200 shadow-sm flex flex-col justify-between gap-3"
-                    >
-                      <div className="space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <span className="font-extrabold text-sm text-slate-900">
-                            {rec.customer_name}
-                          </span>
-                          <span className="font-mono-code font-black text-base text-emerald-700">
-                            +₹{rec.amount}
-                          </span>
-                        </div>
+                  {pendingWalletRecharges.map((rec) => {
+                    const isInstant = rec.status === 'INSTANT_CREDIT';
 
-                        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                          {rec.phone && <span>📞 {rec.phone}</span>}
-                          {rec.desk && (
-                            <span className="bg-teal-50 text-teal-700 px-2 py-0.5 rounded-md font-semibold border border-teal-100">
-                              🏢 {rec.desk}
-                            </span>
-                          )}
-                          <span>• Current Wallet: ₹{rec.wallet_balance || 0}</span>
-                        </div>
-
-                        {rec.utr && (
-                          <div className="bg-slate-50 p-2 rounded-xl border border-slate-200 flex items-center justify-between text-xs">
-                            <span className="text-slate-500 font-semibold">12-Digit UTR:</span>
-                            <span className="font-mono font-bold text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200">
-                              {rec.utr}
+                    return (
+                      <div
+                        key={rec.id}
+                        className={`rounded-2xl p-4 border shadow-sm flex flex-col justify-between gap-3 ${
+                          isInstant ? 'bg-white border-emerald-300 ring-1 ring-emerald-200' : 'bg-white border-amber-200'
+                        }`}
+                      >
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="font-extrabold text-sm text-slate-900">
+                                {rec.customer_name}
+                              </span>
+                              {isInstant ? (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                                  <Zap className="w-2.5 h-2.5" />
+                                  ⚡ Option A (Self-Credited)
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1">
+                                  <Clock className="w-2.5 h-2.5" />
+                                  ⏳ Option B (Awaiting Approval)
+                                </span>
+                              )}
+                            </div>
+                            <span className="font-mono font-black text-base text-emerald-700">
+                              +₹{rec.amount}
                             </span>
                           </div>
-                        )}
 
-                        <p className="text-[11px] text-slate-400 flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          <span>Submitted: {new Date(rec.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                        </p>
-                      </div>
+                          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                            {rec.phone && <span>📞 {rec.phone}</span>}
+                            {rec.department && (
+                              <span className="bg-teal-50 text-teal-700 px-2 py-0.5 rounded-md font-semibold border border-teal-100">
+                                🏢 {rec.department}
+                              </span>
+                            )}
+                            <span>• Wallet Balance: ₹{rec.current_wallet_balance || rec.wallet_balance || 0}</span>
+                          </div>
 
-                      {/* Action Buttons */}
-                      <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
-                        <button
-                          onClick={() => handleRejectWalletRecharge(rec.id)}
-                          className="py-2 px-3 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-700 text-xs font-bold transition-all border border-slate-200"
-                        >
-                          ✕ Reject
-                        </button>
-
-                        <button
-                          disabled={verifyingRechargeId === rec.id}
-                          onClick={() => handleVerifyWalletRecharge(rec.id)}
-                          className="py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-extrabold shadow-sm transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
-                        >
-                          {verifyingRechargeId === rec.id ? (
-                            <>
-                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                              <span>Crediting...</span>
-                            </>
-                          ) : (
-                            <>
-                              <Check className="w-3.5 h-3.5" />
-                              <span>Verify & Credit ₹{rec.amount}</span>
-                            </>
+                          {rec.utr && (
+                            <div className="bg-slate-50 p-2 rounded-xl border border-slate-200 flex items-center justify-between text-xs">
+                              <span className="text-slate-500 font-semibold">12-Digit UTR:</span>
+                              <span className="font-mono font-bold text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200">
+                                {rec.utr}
+                              </span>
+                            </div>
                           )}
-                        </button>
+
+                          <p className="text-[11px] text-slate-400 flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            <span>Submitted: {new Date(rec.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          </p>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+                          <button
+                            onClick={() => handleRejectWalletRecharge(rec.id, isInstant, rec.amount, rec.customer_name)}
+                            className={`py-2 px-3 rounded-xl text-xs font-bold transition-all border ${
+                              isInstant 
+                                ? 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200' 
+                                : 'bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-700 border-slate-200'
+                            }`}
+                          >
+                            {isInstant ? '⚠ Revert Balance' : '✕ Reject'}
+                          </button>
+
+                          <button
+                            disabled={verifyingRechargeId === rec.id}
+                            onClick={() => handleVerifyWalletRecharge(rec.id)}
+                            className="py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-extrabold shadow-sm transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                          >
+                            {verifyingRechargeId === rec.id ? (
+                              <>
+                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                <span>Processing...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Check className="w-3.5 h-3.5" />
+                                <span>{isInstant ? '✓ Mark Audited' : `Verify & Credit ₹${rec.amount}`}</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -2954,6 +2981,64 @@ export default function OperatorConsole() {
                   onChange={(e) => setSettings({ ...settings, upi_name: e.target.value })}
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-2">
+                  Prepaid Wallet Top-Up Processing Mode
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <label
+                    className={`p-3.5 rounded-2xl border-2 cursor-pointer transition-all flex items-start gap-3 ${
+                      (settings.wallet_recharge_mode || 'option_a') === 'option_a'
+                        ? 'bg-emerald-50/90 border-emerald-500 shadow-sm'
+                        : 'bg-white border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="wallet_recharge_mode"
+                      value="option_a"
+                      checked={(settings.wallet_recharge_mode || 'option_a') === 'option_a'}
+                      onChange={() => setSettings({ ...settings, wallet_recharge_mode: 'option_a' })}
+                      className="mt-1 text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-extrabold text-xs text-slate-900">Option A: Instant Self-Credit</span>
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-emerald-200 text-emerald-900 uppercase">Recommended</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 leading-snug">
+                        Customers entering 12-digit UTR get instant wallet credit for fast 1-tap checkout. Cashier audits in background and can 1-click revert balance if fake.
+                      </p>
+                    </div>
+                  </label>
+
+                  <label
+                    className={`p-3.5 rounded-2xl border-2 cursor-pointer transition-all flex items-start gap-3 ${
+                      settings.wallet_recharge_mode === 'option_b'
+                        ? 'bg-amber-50/90 border-amber-500 shadow-sm'
+                        : 'bg-white border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="wallet_recharge_mode"
+                      value="option_b"
+                      checked={settings.wallet_recharge_mode === 'option_b'}
+                      onChange={() => setSettings({ ...settings, wallet_recharge_mode: 'option_b' })}
+                      className="mt-1 text-amber-600 focus:ring-amber-500"
+                    />
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-extrabold text-xs text-slate-900">Option B: Cashier Confirmation</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 leading-snug">
+                        Wallet balance stays pending until cashier clicks "Verify & Credit". Maximum manual control before crediting funds.
+                      </p>
+                    </div>
+                  </label>
+                </div>
               </div>
 
               <button

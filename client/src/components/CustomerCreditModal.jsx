@@ -305,13 +305,28 @@ export default function CustomerCreditModal({ isOpen, onClose, initialTab = 'wal
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || 'Failed to submit wallet recharge');
 
-      setPendingWalletRecharge({
-        amount: amt,
-        utr: cleanUtr
-      });
-      setShowWalletRecharge(false);
-      setWalletUtr('');
-      handleSearch(accountData.account.customer_name);
+      if (result.status === 'INSTANT_CREDIT' || result.mode === 'OPTION_A') {
+        // Option A: Instant Self-Credit!
+        confetti({ particleCount: 75, spread: 65, origin: { y: 0.6 } });
+        setWalletSuccess({
+          amount: amt,
+          utr: cleanUtr,
+          newBalance: result.new_wallet_balance != null ? result.new_wallet_balance : ((accountData?.account?.wallet_balance || 0) + amt)
+        });
+        setPendingWalletRecharge(null);
+        setShowWalletRecharge(false);
+        setWalletUtr('');
+        handleSearch(accountData.account.customer_name);
+      } else {
+        // Option B: Pending cashier approval
+        setPendingWalletRecharge({
+          amount: amt,
+          utr: cleanUtr
+        });
+        setShowWalletRecharge(false);
+        setWalletUtr('');
+        handleSearch(accountData.account.customer_name);
+      }
     } catch (err) {
       alert(err.message || 'Recharge request failed');
     } finally {
@@ -705,7 +720,7 @@ export default function CustomerCreditModal({ isOpen, onClose, initialTab = 'wal
                         className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 font-mono text-sm tracking-wider focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white shadow-xs"
                       />
                       <p className="text-[11px] text-slate-500 mt-1">
-                        Option B Flow: Cashier verifies receipt at Counter 1 and balance reflects immediately.
+                        Submitting your 12-digit UTR credits your wallet balance for immediate 1-tap food ordering.
                       </p>
                     </div>
                     <button
@@ -842,6 +857,12 @@ export default function CustomerCreditModal({ isOpen, onClose, initialTab = 'wal
                                   {isPending && (
                                     <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-300 text-slate-900 uppercase">
                                       Awaiting Verify
+                                    </span>
+                                  )}
+                                  {tx.status === 'INSTANT_CREDIT' && (
+                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-emerald-200 text-emerald-900 uppercase flex items-center gap-0.5">
+                                      <Zap className="w-2.5 h-2.5" />
+                                      Self-Credited
                                     </span>
                                   )}
                                   {isRefund && (
