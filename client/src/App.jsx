@@ -114,11 +114,20 @@ export default function App() {
     };
   }, [activeOrder?.id]);
 
+  const [lastView, setLastView] = useState('customer');
+
   // Handle URL history state when changing views
   const handleSetView = (view) => {
+    if (currentView !== 'display') {
+      setLastView(currentView);
+    }
     setCurrentView(view);
     const url = view === 'customer' ? '/' : `/?view=${view}`;
     window.history.pushState({}, '', url);
+  };
+
+  const handleExitDisplay = () => {
+    handleSetView(lastView === 'display' ? 'customer' : (lastView || 'customer'));
   };
 
   // Cart Actions
@@ -150,20 +159,9 @@ export default function App() {
 
   const totalCartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
-  // If in TV Display mode, hide standard navbar to show a distraction-free full-screen kiosk board
+  // If in TV Display mode, show dedicated kiosk board with integrated exit button
   if (currentView === 'display') {
-    return (
-      <div className="relative">
-        <button
-          onClick={() => handleSetView('operator')}
-          className="fixed top-2 right-2 opacity-10 hover:opacity-100 z-50 text-xs text-white bg-black/60 px-2 py-1 rounded transition-opacity"
-          title="Exit TV Mode"
-        >
-          Exit Display
-        </button>
-        <PublicDisplay />
-      </div>
-    );
+    return <PublicDisplay onExit={handleExitDisplay} />;
   }
 
   return (
