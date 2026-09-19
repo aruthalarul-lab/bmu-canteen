@@ -488,118 +488,93 @@ export default function CustomerMenu({
           </div>
         </div>
 
-        {/* ================= TODAY'S SPECIALS & QUICK PICKS ================= */}
+        {/* ================= TODAY'S SPECIALS & QUICK PICKS (FAST-POS STYLE) ================= */}
         {specialItems.length > 0 && (
-          <div className="mb-6 bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/10 border border-orange-200/80 rounded-3xl p-4 sm:p-5 shadow-xs">
-            <div className="flex items-center justify-between gap-2 mb-3.5">
-              <div className="flex items-center space-x-2 min-w-0">
-                <span className="flex items-center justify-center w-8 h-8 rounded-2xl bg-orange-500 text-white shadow-sm shrink-0">
-                  <Flame className="w-4 h-4 fill-white" />
-                </span>
-                <div className="min-w-0">
-                  <div className="flex items-center space-x-1.5 flex-wrap">
-                    <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
-                      Today's Specials
-                    </h2>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide bg-orange-500 text-white shadow-xs">
-                      Fast Picks
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 truncate">
-                    Chef's fresh highlights • 1-tap quick add
-                  </p>
-                </div>
+          <div className="mb-6 bg-gradient-to-r from-amber-50/90 via-orange-50/90 to-amber-50/90 border border-amber-300 rounded-3xl p-3 sm:p-4 shadow-xs">
+            <div className="flex items-center justify-between gap-2 mb-2.5">
+              <div className="flex items-center gap-1.5 text-xs sm:text-sm font-black text-amber-950 tracking-wide uppercase">
+                <Star className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-amber-500 text-amber-500 shrink-0" />
+                <span>Today's Specials • 1-Tap Fast Pick</span>
               </div>
-              <div className="flex items-center space-x-1.5 shrink-0">
+              <div className="flex items-center gap-1.5 shrink-0">
                 <button
                   onClick={() => shareSpecialsWhatsApp({ 
                     specials: specialItems, 
                     canteenName: 'BMU Canteen' 
                   })}
-                  className="flex items-center space-x-1 px-2 sm:px-2.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white text-xs font-bold shadow-xs transition-all"
-                  title="Share Today's Specials to WhatsApp"
+                  className="px-2.5 py-1 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white text-[11px] font-bold flex items-center gap-1 shadow-xs transition-all"
+                  title="Broadcast Today's Specials on WhatsApp"
                 >
                   <WhatsAppIcon className="w-3.5 h-3.5 fill-white" />
-                  <span className="hidden sm:inline">Share</span>
+                  <span>Broadcast</span>
                 </button>
-                <span className="text-[11px] sm:text-xs font-bold text-orange-700 bg-white border border-orange-200 px-2 sm:px-2.5 py-1.5 rounded-xl shadow-2xs whitespace-nowrap">
-                  {specialItems.length} Specials
+                <span className="text-[10px] font-bold text-amber-900 bg-amber-200/80 px-2.5 py-0.5 rounded-full hidden sm:inline-block">
+                  Rush Ready
                 </span>
               </div>
             </div>
 
-            {/* Horizontal Scroll Shelf */}
-            <div className="flex space-x-3 overflow-x-auto pb-3 pt-1 custom-scrollbar-orange -mx-2 px-2 sm:mx-0 sm:px-0">
+            {/* Horizontal Scroll Shelf (Fast-POS Pill Style) */}
+            <div className="flex items-center gap-2 sm:gap-2.5 overflow-x-auto pb-2.5 pt-0.5 custom-scrollbar-amber -mx-1 px-1 sm:mx-0 sm:px-0">
               {specialItems.map(item => {
                 const inCart = safeCart.find(c => c.id === item.id);
                 return (
                   <div
-                    key={item.id}
-                    className="shrink-0 w-56 sm:w-64 bg-white rounded-2xl border border-orange-200/90 hover:border-orange-400 p-3.5 sm:p-4 shadow-xs hover:shadow-md transition-all flex flex-col justify-between group"
+                    key={`special-${item.id}`}
+                    onClick={() => addToCart(item)}
+                    className={`flex items-center gap-2.5 px-3.5 py-2.5 bg-white hover:bg-amber-100/80 border rounded-2xl shadow-xs shrink-0 transition-all active:scale-95 group text-left cursor-pointer ${
+                      inCart ? 'border-amber-400 ring-1 ring-amber-400/50 bg-amber-50/40' : 'border-amber-300'
+                    }`}
                   >
-                    <div>
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <div className="w-12 h-12 rounded-2xl bg-orange-50/80 border border-orange-200/70 flex items-center justify-center text-2xl select-none group-hover:scale-105 transition-transform shadow-xs shrink-0">
-                          {item.image_emoji || '🍲'}
-                        </div>
-                        <div className="flex items-center space-x-1.5 shrink-0">
-                          {item.is_veg === 1 ? (
-                            <span className="w-3.5 h-3.5 rounded-sm border border-emerald-600 bg-white flex items-center justify-center p-0.5 shadow-xs" title="Pure Veg">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
-                            </span>
-                          ) : (
-                            <span className="w-3.5 h-3.5 rounded-sm border border-rose-600 bg-white flex items-center justify-center p-0.5 shadow-xs" title="Non-Veg">
-                              <span className="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
-                            </span>
-                          )}
-                          <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded-md flex items-center gap-0.5">
-                            <Star className="w-2.5 h-2.5 fill-amber-500 text-amber-500" />
-                            Special
+                    <span className="text-xl sm:text-2xl group-hover:scale-110 transition-transform select-none shrink-0">
+                      {item.image_emoji || '⭐'}
+                    </span>
+                    <div className="min-w-0 pr-0.5">
+                      <div className="flex items-center gap-1">
+                        <p className="text-xs sm:text-sm font-black text-slate-900 leading-tight whitespace-nowrap">
+                          {item.name}
+                        </p>
+                        {item.is_veg === 1 ? (
+                          <span className="w-2.5 h-2.5 rounded-xs border border-emerald-600 bg-white flex items-center justify-center p-px shrink-0" title="Pure Veg">
+                            <span className="w-1 h-1 rounded-full bg-emerald-600"></span>
                           </span>
-                        </div>
+                        ) : (
+                          <span className="w-2.5 h-2.5 rounded-xs border border-rose-600 bg-white flex items-center justify-center p-px shrink-0" title="Non-Veg">
+                            <span className="w-1 h-1 rounded-full bg-rose-600"></span>
+                          </span>
+                        )}
                       </div>
-
-                      <h3 className="font-black text-sm sm:text-base text-slate-900 line-clamp-2 min-h-[2.5rem] leading-snug">
-                        {item.name}
-                      </h3>
-                      <p className="text-xs text-slate-500 line-clamp-2 min-h-[2rem] mt-1 leading-relaxed">
-                        {item.description || item.category_name}
+                      <p className="text-xs font-black text-orange-600 mt-0.5">
+                        ₹{item.price}
                       </p>
                     </div>
 
-                    <div className="flex items-center justify-between pt-3 mt-2.5 border-t border-slate-100">
-                      <span className="font-black text-base sm:text-lg text-slate-900">
-                        ₹{item.price}
-                      </span>
-
-                      {inCart ? (
-                        <div className="flex items-center space-x-1.5 bg-orange-50 border border-orange-300 rounded-xl p-0.5 shadow-xs">
-                          <button
-                            onClick={() => updateQuantity(item.id, inCart.quantity - 1)}
-                            className="w-7 h-7 rounded-lg bg-white text-orange-600 shadow-xs flex items-center justify-center hover:bg-orange-100 transition-colors"
-                          >
-                            <Minus className="w-3.5 h-3.5" />
-                          </button>
-                          <span className="font-extrabold text-xs text-slate-900 min-w-[18px] text-center">
-                            {inCart.quantity}
-                          </span>
-                          <button
-                            onClick={() => updateQuantity(item.id, inCart.quantity + 1)}
-                            className="w-7 h-7 rounded-lg bg-orange-500 text-white shadow-xs flex items-center justify-center hover:bg-orange-600 transition-colors"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => addToCart(item)}
-                          className="flex items-center justify-center space-x-1 bg-orange-500 hover:bg-orange-600 text-white px-3.5 py-1.5 rounded-xl text-xs font-black shadow-xs transition-all active:scale-95 min-w-[70px]"
+                    {inCart ? (
+                      <div 
+                        className="ml-1.5 flex items-center bg-orange-50 border border-orange-300 rounded-full px-1.5 py-0.5 shadow-xs shrink-0" 
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <button 
+                          onClick={() => updateQuantity(item.id, inCart.quantity - 1)} 
+                          className="w-4 h-4 rounded-full text-orange-600 font-bold flex items-center justify-center hover:bg-orange-200"
                         >
-                          <Plus className="w-3.5 h-3.5" />
-                          <span>ADD</span>
+                          -
                         </button>
-                      )}
-                    </div>
+                        <span className="px-1 text-[11px] font-black text-slate-900">
+                          {inCart.quantity}
+                        </span>
+                        <button 
+                          onClick={() => updateQuantity(item.id, inCart.quantity + 1)} 
+                          className="w-4 h-4 rounded-full bg-orange-500 text-white font-bold flex items-center justify-center hover:bg-orange-600"
+                        >
+                          +
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="ml-1.5 w-6 h-6 rounded-full bg-amber-500 group-hover:bg-amber-600 text-white font-black text-xs flex items-center justify-center shadow-xs shrink-0 transition-colors">
+                        +
+                      </span>
+                    )}
                   </div>
                 );
               })}

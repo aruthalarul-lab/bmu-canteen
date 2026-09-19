@@ -66,10 +66,10 @@ export default function Navbar({ currentView, setView, cartCount, setIsCartOpen,
                   <span className="hidden md:inline text-xs sm:text-sm">TV Board</span>
                 </button>
 
-                {/* QR Barcode Button */}
+                {/* QR Barcode Button (Hidden on Mobile) */}
                 <button
                   onClick={() => setShowQrModal(true)}
-                  className="flex items-center space-x-1 px-2 py-1.5 sm:px-2.5 sm:py-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-200/60 transition-all"
+                  className="hidden sm:flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-200/60 transition-all"
                   title="Scan QR Code to open on phone"
                 >
                   <QrCode className="w-4 h-4 text-orange-500 shrink-0" />
