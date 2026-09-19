@@ -3507,146 +3507,151 @@ export default function OperatorConsole() {
         )}
 
         {/* Add Item Modal */}
+        {/* Add Item Modal */}
         {showAddItemModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-            <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden border border-slate-100">
-              <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-6 py-4 text-white flex items-center justify-between">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in overflow-y-auto">
+            <div className="bg-white w-full max-w-lg rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden border border-slate-100 max-h-[92vh] sm:max-h-[88vh] flex flex-col my-auto">
+              <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-5 sm:px-6 py-3.5 sm:py-4 text-white flex items-center justify-between shrink-0 shadow-xs">
                 <div className="flex items-center space-x-2">
                   <Plus className="w-5 h-5 text-orange-400" />
                   <h3 className="font-bold text-base">Add New Menu Item</h3>
                 </div>
                 <button 
+                  type="button"
                   onClick={() => setShowAddItemModal(false)}
-                  className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+                  className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors cursor-pointer"
+                  title="Close"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              <form onSubmit={handleAddItem} className="p-6 space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="sm:col-span-2">
+              <form onSubmit={handleAddItem} className="flex flex-col flex-1 min-h-0">
+                <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1 overscroll-contain">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                        Item Name *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Chicken Dum Biryani / Egg Roll"
+                        value={newItem.name}
+                        onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
+                        className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                        Category *
+                      </label>
+                      <select
+                        value={newItem.category_id}
+                        onChange={(e) => setNewItem({ ...newItem, category_id: parseInt(e.target.value, 10) })}
+                        className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none bg-white"
+                      >
+                        {categories.map(c => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                        Price (₹) *
+                      </label>
+                      <input
+                        type="number"
+                        required
+                        min="1"
+                        step="1"
+                        placeholder="e.g. 120"
+                        value={newItem.price}
+                        onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
+                        className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Diet Type Selector (Veg vs Non-Veg) */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
+                      Food Type (Diet) *
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setNewItem({ ...newItem, is_veg: 1 })}
+                        className={`p-3 rounded-xl border flex items-center justify-center space-x-2 font-bold text-xs transition-all ${
+                          newItem.is_veg === 1
+                            ? 'bg-emerald-50 border-emerald-500 text-emerald-800 ring-2 ring-emerald-500/20 shadow-sm'
+                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span className="w-3.5 h-3.5 rounded-sm border border-emerald-600 bg-white flex items-center justify-center p-0.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                        </span>
+                        <span>Pure Veg 🟢</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setNewItem({ ...newItem, is_veg: 0 })}
+                        className={`p-3 rounded-xl border flex items-center justify-center space-x-2 font-bold text-xs transition-all ${
+                          newItem.is_veg === 0
+                            ? 'bg-rose-50 border-rose-500 text-rose-800 ring-2 ring-rose-500/20 shadow-sm'
+                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span className="w-3.5 h-3.5 rounded-sm border border-rose-600 bg-white flex items-center justify-center p-0.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
+                        </span>
+                        <span>Non-Veg 🔴</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Icon Emoji Selector */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
+                      Dish Icon / Emoji
+                    </label>
+                    <MenuIconPicker
+                      selectedEmoji={newItem.image_emoji}
+                      onSelectEmoji={(emoji) => setNewItem({ ...newItem, image_emoji: emoji })}
+                    />
+                  </div>
+
+                  <div>
                     <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                      Item Name *
+                      Short Description (Optional)
                     </label>
                     <input
                       type="text"
-                      required
-                      placeholder="e.g. Chicken Dum Biryani / Egg Roll"
-                      value={newItem.name}
-                      onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
+                      placeholder="e.g. Served with hot spicy gravy and raita"
+                      value={newItem.description}
+                      onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
                       className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none"
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                      Category *
-                    </label>
-                    <select
-                      value={newItem.category_id}
-                      onChange={(e) => setNewItem({ ...newItem, category_id: parseInt(e.target.value, 10) })}
-                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none bg-white"
-                    >
-                      {categories.map(c => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                      Price (₹) *
-                    </label>
+                  <div className="flex items-center space-x-2 pt-1">
                     <input
-                      type="number"
-                      required
-                      min="1"
-                      step="1"
-                      placeholder="e.g. 120"
-                      value={newItem.price}
-                      onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
-                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                      type="checkbox"
+                      id="quickItemCheck"
+                      checked={newItem.is_quick_item === 1}
+                      onChange={(e) => setNewItem({ ...newItem, is_quick_item: e.target.checked ? 1 : 0 })}
+                      className="w-4 h-4 text-orange-600 rounded border-slate-300 focus:ring-orange-500"
                     />
+                    <label htmlFor="quickItemCheck" className="text-xs font-semibold text-slate-700 cursor-pointer">
+                      Show as Fast-POS quick button on operator screen
+                    </label>
                   </div>
                 </div>
 
-                {/* Diet Type Selector (Veg vs Non-Veg) */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
-                    Food Type (Diet) *
-                  </label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setNewItem({ ...newItem, is_veg: 1 })}
-                      className={`p-3 rounded-xl border flex items-center justify-center space-x-2 font-bold text-xs transition-all ${
-                        newItem.is_veg === 1
-                          ? 'bg-emerald-50 border-emerald-500 text-emerald-800 ring-2 ring-emerald-500/20 shadow-sm'
-                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                      }`}
-                    >
-                      <span className="w-3.5 h-3.5 rounded-sm border border-emerald-600 bg-white flex items-center justify-center p-0.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
-                      </span>
-                      <span>Pure Veg 🟢</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setNewItem({ ...newItem, is_veg: 0 })}
-                      className={`p-3 rounded-xl border flex items-center justify-center space-x-2 font-bold text-xs transition-all ${
-                        newItem.is_veg === 0
-                          ? 'bg-rose-50 border-rose-500 text-rose-800 ring-2 ring-rose-500/20 shadow-sm'
-                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                      }`}
-                    >
-                      <span className="w-3.5 h-3.5 rounded-sm border border-rose-600 bg-white flex items-center justify-center p-0.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
-                      </span>
-                      <span>Non-Veg 🔴</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Icon Emoji Selector */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
-                    Dish Icon / Emoji
-                  </label>
-                  <MenuIconPicker
-                    selectedEmoji={newItem.image_emoji}
-                    onSelectEmoji={(emoji) => setNewItem({ ...newItem, image_emoji: emoji })}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                    Short Description (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Served with hot spicy gravy and raita"
-                    value={newItem.description}
-                    onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none"
-                  />
-                </div>
-
-                <div className="flex items-center space-x-2 pt-1">
-                  <input
-                    type="checkbox"
-                    id="quickItemCheck"
-                    checked={newItem.is_quick_item === 1}
-                    onChange={(e) => setNewItem({ ...newItem, is_quick_item: e.target.checked ? 1 : 0 })}
-                    className="w-4 h-4 text-orange-600 rounded border-slate-300 focus:ring-orange-500"
-                  />
-                  <label htmlFor="quickItemCheck" className="text-xs font-semibold text-slate-700 cursor-pointer">
-                    Show as Fast-POS quick button on operator screen
-                  </label>
-                </div>
-
-                <div className="pt-3 border-t border-slate-100 flex items-center justify-end space-x-2">
+                <div className="p-3.5 sm:p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end space-x-2 shrink-0">
                   <button
                     type="button"
                     onClick={() => setShowAddItemModal(false)}
@@ -3657,9 +3662,10 @@ export default function OperatorConsole() {
                   <button
                     type="submit"
                     disabled={addingItem}
-                    className="px-5 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-bold text-xs shadow-md shadow-orange-500/20 transition-all"
+                    className="px-5 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-bold text-xs shadow-md shadow-orange-500/20 transition-all flex items-center gap-1.5"
                   >
-                    {addingItem ? 'Adding...' : 'Add to Menu'}
+                    {addingItem ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                    <span>{addingItem ? 'Adding...' : 'Add to Menu'}</span>
                   </button>
                 </div>
               </form>
@@ -3669,145 +3675,149 @@ export default function OperatorConsole() {
 
         {/* Edit Menu Item Modal */}
         {editingItem && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-            <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden border border-slate-100 max-h-[90vh] flex flex-col">
-              <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-6 py-4 text-white flex items-center justify-between shrink-0">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in overflow-y-auto">
+            <div className="bg-white w-full max-w-lg rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden border border-slate-100 max-h-[92vh] sm:max-h-[88vh] flex flex-col my-auto">
+              <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-5 sm:px-6 py-3.5 sm:py-4 text-white flex items-center justify-between shrink-0 shadow-xs">
                 <div className="flex items-center space-x-2">
                   <Edit2 className="w-5 h-5 text-orange-400" />
                   <h3 className="font-bold text-base">Edit Menu Item</h3>
                 </div>
                 <button 
+                  type="button"
                   onClick={() => setEditingItem(null)}
-                  className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+                  className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors cursor-pointer"
+                  title="Close"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              <form onSubmit={handleUpdateItem} className="p-6 space-y-4 overflow-y-auto flex-1">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="sm:col-span-2">
+              <form onSubmit={handleUpdateItem} className="flex flex-col flex-1 min-h-0">
+                <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1 overscroll-contain">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                        Item Name *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Masala Dosa"
+                        value={editItemForm.name}
+                        onChange={(e) => setEditItemForm({ ...editItemForm, name: e.target.value })}
+                        className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                        Category *
+                      </label>
+                      <select
+                        value={editItemForm.category_id}
+                        onChange={(e) => setEditItemForm({ ...editItemForm, category_id: parseInt(e.target.value, 10) })}
+                        className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none bg-white"
+                      >
+                        {categories.map(c => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                        Price (₹) *
+                      </label>
+                      <input
+                        type="number"
+                        required
+                        min="1"
+                        step="1"
+                        placeholder="e.g. 50"
+                        value={editItemForm.price}
+                        onChange={(e) => setEditItemForm({ ...editItemForm, price: e.target.value })}
+                        className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Diet Type Selector (Veg vs Non-Veg) */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
+                      Food Type (Diet) *
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setEditItemForm({ ...editItemForm, is_veg: 1 })}
+                        className={`p-3 rounded-xl border flex items-center justify-center space-x-2 font-bold text-xs transition-all ${
+                          editItemForm.is_veg === 1
+                            ? 'bg-emerald-50 border-emerald-500 text-emerald-800 ring-2 ring-emerald-500/20 shadow-sm'
+                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span className="w-3.5 h-3.5 rounded-sm border border-emerald-600 bg-white flex items-center justify-center p-0.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                        </span>
+                        <span>Pure Veg 🟢</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setEditItemForm({ ...editItemForm, is_veg: 0 })}
+                        className={`p-3 rounded-xl border flex items-center justify-center space-x-2 font-bold text-xs transition-all ${
+                          editItemForm.is_veg === 0
+                            ? 'bg-rose-50 border-rose-500 text-rose-800 ring-2 ring-rose-500/20 shadow-sm'
+                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span className="w-3.5 h-3.5 rounded-sm border border-rose-600 bg-white flex items-center justify-center p-0.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
+                        </span>
+                        <span>Non-Veg 🔴</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Icon Emoji Selector */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
+                      Dish Icon / Emoji
+                    </label>
+                    <MenuIconPicker
+                      selectedEmoji={editItemForm.image_emoji}
+                      onSelectEmoji={(emoji) => setEditItemForm({ ...editItemForm, image_emoji: emoji })}
+                    />
+                  </div>
+
+                  <div>
                     <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                      Item Name *
+                      Short Description (Optional)
                     </label>
                     <input
                       type="text"
-                      required
-                      placeholder="e.g. Masala Dosa"
-                      value={editItemForm.name}
-                      onChange={(e) => setEditItemForm({ ...editItemForm, name: e.target.value })}
+                      placeholder="e.g. Served hot with fresh chutney and sambar"
+                      value={editItemForm.description}
+                      onChange={(e) => setEditItemForm({ ...editItemForm, description: e.target.value })}
                       className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none"
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                      Category *
-                    </label>
-                    <select
-                      value={editItemForm.category_id}
-                      onChange={(e) => setEditItemForm({ ...editItemForm, category_id: parseInt(e.target.value, 10) })}
-                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none bg-white"
-                    >
-                      {categories.map(c => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                      Price (₹) *
-                    </label>
+                  <div className="flex items-center space-x-2 pt-1">
                     <input
-                      type="number"
-                      required
-                      min="1"
-                      step="1"
-                      placeholder="e.g. 50"
-                      value={editItemForm.price}
-                      onChange={(e) => setEditItemForm({ ...editItemForm, price: e.target.value })}
-                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                      type="checkbox"
+                      id="editQuickItemCheck"
+                      checked={editItemForm.is_quick_item === 1}
+                      onChange={(e) => setEditItemForm({ ...editItemForm, is_quick_item: e.target.checked ? 1 : 0 })}
+                      className="w-4 h-4 text-orange-600 rounded border-slate-300 focus:ring-orange-500"
                     />
+                    <label htmlFor="editQuickItemCheck" className="text-xs font-semibold text-slate-700 cursor-pointer">
+                      Show as Fast-POS quick button on operator screen
+                    </label>
                   </div>
                 </div>
 
-                {/* Diet Type Selector (Veg vs Non-Veg) */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
-                    Food Type (Diet) *
-                  </label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setEditItemForm({ ...editItemForm, is_veg: 1 })}
-                      className={`p-3 rounded-xl border flex items-center justify-center space-x-2 font-bold text-xs transition-all ${
-                        editItemForm.is_veg === 1
-                          ? 'bg-emerald-50 border-emerald-500 text-emerald-800 ring-2 ring-emerald-500/20 shadow-sm'
-                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                      }`}
-                    >
-                      <span className="w-3.5 h-3.5 rounded-sm border border-emerald-600 bg-white flex items-center justify-center p-0.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
-                      </span>
-                      <span>Pure Veg 🟢</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setEditItemForm({ ...editItemForm, is_veg: 0 })}
-                      className={`p-3 rounded-xl border flex items-center justify-center space-x-2 font-bold text-xs transition-all ${
-                        editItemForm.is_veg === 0
-                          ? 'bg-rose-50 border-rose-500 text-rose-800 ring-2 ring-rose-500/20 shadow-sm'
-                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                      }`}
-                    >
-                      <span className="w-3.5 h-3.5 rounded-sm border border-rose-600 bg-white flex items-center justify-center p-0.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
-                      </span>
-                      <span>Non-Veg 🔴</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Icon Emoji Selector */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
-                    Dish Icon / Emoji
-                  </label>
-                  <MenuIconPicker
-                    selectedEmoji={editItemForm.image_emoji}
-                    onSelectEmoji={(emoji) => setEditItemForm({ ...editItemForm, image_emoji: emoji })}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                    Short Description (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Served hot with fresh chutney and sambar"
-                    value={editItemForm.description}
-                    onChange={(e) => setEditItemForm({ ...editItemForm, description: e.target.value })}
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none"
-                  />
-                </div>
-
-                <div className="flex items-center space-x-2 pt-1">
-                  <input
-                    type="checkbox"
-                    id="editQuickItemCheck"
-                    checked={editItemForm.is_quick_item === 1}
-                    onChange={(e) => setEditItemForm({ ...editItemForm, is_quick_item: e.target.checked ? 1 : 0 })}
-                    className="w-4 h-4 text-orange-600 rounded border-slate-300 focus:ring-orange-500"
-                  />
-                  <label htmlFor="editQuickItemCheck" className="text-xs font-semibold text-slate-700 cursor-pointer">
-                    Show as Fast-POS quick button on operator screen
-                  </label>
-                </div>
-
-                <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+                <div className="p-3.5 sm:p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between shrink-0">
                   <button
                     type="button"
                     disabled={deletingItem}
@@ -3831,7 +3841,8 @@ export default function OperatorConsole() {
                       disabled={updatingItem}
                       className="px-5 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-bold text-xs shadow-md shadow-orange-500/20 transition-all flex items-center gap-1.5"
                     >
-                      {updatingItem ? 'Saving...' : 'Save Changes'}
+                      {updatingItem ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : null}
+                      <span>{updatingItem ? 'Saving...' : 'Save Changes'}</span>
                     </button>
                   </div>
                 </div>
