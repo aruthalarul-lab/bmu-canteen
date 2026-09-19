@@ -458,32 +458,29 @@ export default function CustomerMenu({
             <p className="mt-2 text-sm text-slate-300">
               Select items, pay with UPI QR or Cash, and get an instant live token number.
             </p>
-            <div className="mt-4 pt-3.5 border-t border-slate-700/60 flex flex-wrap items-center justify-between gap-2">
-              <span className="text-xs text-slate-300">
-                Digital Accounts & Fast Checkout:
-              </span>
-              <div className="flex items-center gap-2">
+            {/* Prepaid Wallet Quick Bar */}
+            <div className="mt-4 pt-3.5 border-t border-slate-700/60">
+              <div className="bg-white/10 hover:bg-white/15 backdrop-blur-md border border-white/15 rounded-2xl p-3 sm:p-3.5 flex items-center justify-between gap-2.5 transition-all">
+                <div className="flex items-center space-x-2.5 min-w-0">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-500/30 border border-emerald-400/40 flex items-center justify-center text-emerald-300 shrink-0">
+                    <Wallet className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs sm:text-sm font-black text-white truncate">BMU Canteen - Prepaid Wallet</p>
+                    <p className="text-[11px] text-emerald-300 font-semibold truncate">
+                      {userWalletBalance > 0 ? `Available: ₹${userWalletBalance} • 1-Tap Pay` : '1-Tap Fast Checkout • Instant QR Top-Up'}
+                    </p>
+                  </div>
+                </div>
                 <button
                   type="button"
                   onClick={() => {
                     setCreditModalTab('wallet');
                     setShowCreditModal(true);
                   }}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition-all active:scale-95 shadow-xs"
+                  className="px-3 sm:px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-black shrink-0 transition-all active:scale-95 shadow-sm flex items-center gap-1"
                 >
-                  <Wallet className="w-3.5 h-3.5" />
-                  <span>👛 Prepaid Wallet ({userWalletBalance > 0 ? `₹${userWalletBalance}` : 'Top-Up'})</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCreditModalTab('credit');
-                    setShowCreditModal(true);
-                  }}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-orange-500/20 hover:bg-orange-500/30 text-orange-300 border border-orange-500/40 text-xs font-bold transition-all active:scale-95 shadow-xs"
-                >
-                  <CreditCard className="w-3.5 h-3.5" />
-                  <span>Credit Dues</span>
+                  <span>{userWalletBalance > 0 ? 'Wallet' : '👛 Top-Up'}</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -494,13 +491,13 @@ export default function CustomerMenu({
         {/* ================= TODAY'S SPECIALS & QUICK PICKS ================= */}
         {specialItems.length > 0 && (
           <div className="mb-6 bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/10 border border-orange-200/80 rounded-3xl p-4 sm:p-5 shadow-xs">
-            <div className="flex items-center justify-between mb-3.5">
-              <div className="flex items-center space-x-2">
-                <span className="flex items-center justify-center w-8 h-8 rounded-2xl bg-orange-500 text-white shadow-sm">
+            <div className="flex items-center justify-between gap-2 mb-3.5">
+              <div className="flex items-center space-x-2 min-w-0">
+                <span className="flex items-center justify-center w-8 h-8 rounded-2xl bg-orange-500 text-white shadow-sm shrink-0">
                   <Flame className="w-4 h-4 fill-white" />
                 </span>
-                <div>
-                  <div className="flex items-center space-x-2">
+                <div className="min-w-0">
+                  <div className="flex items-center space-x-1.5 flex-wrap">
                     <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
                       Today's Specials
                     </h2>
@@ -508,25 +505,25 @@ export default function CustomerMenu({
                       Fast Picks
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-500">
-                    Chef's fresh highlights • 1-tap quick add without searching
+                  <p className="text-[11px] text-slate-500 truncate">
+                    Chef's fresh highlights • 1-tap quick add
                   </p>
                 </div>
               </div>
-              <div className="flex items-center space-x-2 shrink-0">
+              <div className="flex items-center space-x-1.5 shrink-0">
                 <button
                   onClick={() => shareSpecialsWhatsApp({ 
                     specials: specialItems, 
                     canteenName: 'BMU Canteen' 
                   })}
-                  className="flex items-center space-x-1 px-2.5 py-1 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white text-xs font-bold shadow-xs transition-all"
+                  className="flex items-center space-x-1 px-2 sm:px-2.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white text-xs font-bold shadow-xs transition-all"
                   title="Share Today's Specials to WhatsApp"
                 >
                   <WhatsAppIcon className="w-3.5 h-3.5 fill-white" />
                   <span className="hidden sm:inline">Share</span>
                 </button>
-                <span className="text-xs font-bold text-orange-700 bg-white border border-orange-200 px-2.5 py-1 rounded-xl shadow-2xs">
-                  {specialItems.length} Featured
+                <span className="text-[11px] sm:text-xs font-bold text-orange-700 bg-white border border-orange-200 px-2 sm:px-2.5 py-1.5 rounded-xl shadow-2xs whitespace-nowrap">
+                  {specialItems.length} Specials
                 </span>
               </div>
             </div>
@@ -538,14 +535,14 @@ export default function CustomerMenu({
                 return (
                   <div
                     key={item.id}
-                    className="shrink-0 w-48 sm:w-56 bg-white rounded-2xl border border-orange-200 hover:border-orange-400 p-3.5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between group"
+                    className="shrink-0 w-56 sm:w-64 bg-white rounded-2xl border border-orange-200/90 hover:border-orange-400 p-3.5 sm:p-4 shadow-xs hover:shadow-md transition-all flex flex-col justify-between group"
                   >
                     <div>
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="w-12 h-12 rounded-xl bg-orange-50 border border-orange-100 flex items-center justify-center text-2xl select-none group-hover:scale-105 transition-transform shadow-inner">
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="w-12 h-12 rounded-2xl bg-orange-50/80 border border-orange-200/70 flex items-center justify-center text-2xl select-none group-hover:scale-105 transition-transform shadow-xs shrink-0">
                           {item.image_emoji || '🍲'}
                         </div>
-                        <div className="flex items-center space-x-1.5">
+                        <div className="flex items-center space-x-1.5 shrink-0">
                           {item.is_veg === 1 ? (
                             <span className="w-3.5 h-3.5 rounded-sm border border-emerald-600 bg-white flex items-center justify-center p-0.5 shadow-xs" title="Pure Veg">
                               <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
@@ -562,44 +559,44 @@ export default function CustomerMenu({
                         </div>
                       </div>
 
-                      <h3 className="font-extrabold text-sm text-slate-900 line-clamp-1 leading-snug">
+                      <h3 className="font-black text-sm sm:text-base text-slate-900 line-clamp-2 min-h-[2.5rem] leading-snug">
                         {item.name}
                       </h3>
-                      <p className="text-[11px] text-slate-400 line-clamp-1 mt-0.5">
+                      <p className="text-xs text-slate-500 line-clamp-2 min-h-[2rem] mt-1 leading-relaxed">
                         {item.description || item.category_name}
                       </p>
                     </div>
 
-                    <div className="flex items-center justify-between pt-3 mt-2 border-t border-slate-100">
-                      <span className="font-black text-base text-slate-900">
+                    <div className="flex items-center justify-between pt-3 mt-2.5 border-t border-slate-100">
+                      <span className="font-black text-base sm:text-lg text-slate-900">
                         ₹{item.price}
                       </span>
 
                       {inCart ? (
-                        <div className="flex items-center space-x-1 bg-orange-50 border border-orange-300 rounded-xl p-0.5 shadow-xs">
+                        <div className="flex items-center space-x-1.5 bg-orange-50 border border-orange-300 rounded-xl p-0.5 shadow-xs">
                           <button
                             onClick={() => updateQuantity(item.id, inCart.quantity - 1)}
-                            className="w-6 h-6 rounded-lg bg-white text-orange-600 shadow-xs flex items-center justify-center hover:bg-orange-100 transition-colors"
+                            className="w-7 h-7 rounded-lg bg-white text-orange-600 shadow-xs flex items-center justify-center hover:bg-orange-100 transition-colors"
                           >
-                            <Minus className="w-3 h-3" />
+                            <Minus className="w-3.5 h-3.5" />
                           </button>
-                          <span className="font-bold text-xs text-slate-900 min-w-[16px] text-center">
+                          <span className="font-extrabold text-xs text-slate-900 min-w-[18px] text-center">
                             {inCart.quantity}
                           </span>
                           <button
                             onClick={() => updateQuantity(item.id, inCart.quantity + 1)}
-                            className="w-6 h-6 rounded-lg bg-white text-orange-600 shadow-xs flex items-center justify-center hover:bg-orange-100 transition-colors"
+                            className="w-7 h-7 rounded-lg bg-orange-500 text-white shadow-xs flex items-center justify-center hover:bg-orange-600 transition-colors"
                           >
-                            <Plus className="w-3 h-3" />
+                            <Plus className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       ) : (
                         <button
                           onClick={() => addToCart(item)}
-                          className="flex items-center space-x-1 bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold shadow-sm transition-all active:scale-95"
+                          className="flex items-center justify-center space-x-1 bg-orange-500 hover:bg-orange-600 text-white px-3.5 py-1.5 rounded-xl text-xs font-black shadow-xs transition-all active:scale-95 min-w-[70px]"
                         >
                           <Plus className="w-3.5 h-3.5" />
-                          <span>Add</span>
+                          <span>ADD</span>
                         </button>
                       )}
                     </div>
@@ -799,7 +796,7 @@ export default function CustomerMenu({
                   }`}
                 >
                   {/* Left: Thumbnail Emoji with Veg Badge */}
-                  <div className="relative shrink-0 w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-orange-50/70 border border-orange-100 flex items-center justify-center text-2xl sm:text-3xl select-none">
+                  <div className="relative shrink-0 w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-orange-50/80 border border-orange-200/70 flex items-center justify-center text-2xl sm:text-3xl select-none shadow-xs">
                     {item.image_emoji || '🍲'}
                     <div className="absolute -top-1 -right-1">
                       {item.is_veg === 1 ? (
@@ -815,33 +812,33 @@ export default function CustomerMenu({
                   </div>
 
                   {/* Middle: Details */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-bold text-slate-900 text-sm sm:text-base truncate">
+                  <div className="flex-1 min-w-0 pr-1">
+                    <div className="flex items-start justify-between gap-1.5">
+                      <h3 className="font-black text-slate-900 text-sm sm:text-base leading-snug line-clamp-2">
                         {item.name}
                       </h3>
                       {item.is_quick_item === 1 && isAvailable && (
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase bg-amber-100 text-amber-800 border border-amber-300 shrink-0 flex items-center gap-0.5">
+                        <span className="px-1.5 py-0.5 rounded-md text-[9px] font-extrabold uppercase bg-amber-100 text-amber-800 border border-amber-300 shrink-0 flex items-center gap-0.5">
                           <Star className="w-2.5 h-2.5 fill-amber-500 text-amber-500" />
                           Special
                         </span>
                       )}
                       {!isAvailable && (
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase bg-rose-100 text-rose-700 border border-rose-200 shrink-0">
+                        <span className="px-1.5 py-0.5 rounded-md text-[9px] font-extrabold uppercase bg-rose-100 text-rose-700 border border-rose-200 shrink-0">
                           Sold Out
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center gap-2 text-xs text-slate-400 mt-0.5">
-                      <span className="font-medium text-slate-400">{item.category_name}</span>
+                    <div className="text-xs text-slate-500 mt-0.5 line-clamp-2 leading-relaxed">
+                      <span className="font-semibold text-slate-400">{item.category_name}</span>
                       {item.description && (
                         <>
-                          <span>•</span>
-                          <span className="truncate max-w-[160px] sm:max-w-xs text-slate-500">{item.description}</span>
+                          <span className="mx-1 text-slate-300">•</span>
+                          <span>{item.description}</span>
                         </>
                       )}
                     </div>
-                    <div className="font-extrabold text-sm sm:text-base text-slate-900 mt-1">
+                    <div className="font-black text-sm sm:text-base text-slate-900 mt-1.5">
                       ₹{item.price}
                     </div>
                   </div>
@@ -849,18 +846,18 @@ export default function CustomerMenu({
                   {/* Right: Quantity Stepper or Add Button */}
                   <div className="shrink-0">
                     {!isAvailable ? (
-                      <span className="px-2.5 py-1 rounded-lg text-xs font-bold text-slate-400 bg-slate-100 border border-slate-200">
+                      <span className="px-2.5 py-1 rounded-xl text-xs font-bold text-slate-400 bg-slate-100 border border-slate-200">
                         Unavailable
                       </span>
                     ) : inCart ? (
-                      <div className="flex items-center space-x-1.5 bg-orange-50 border border-orange-200 rounded-xl p-1">
+                      <div className="flex items-center space-x-1.5 bg-orange-50 border border-orange-300 rounded-xl p-0.5 shadow-xs">
                         <button
                           onClick={() => updateQuantity(item.id, inCart.quantity - 1)}
                           className="w-7 h-7 rounded-lg bg-white text-orange-600 shadow-xs flex items-center justify-center hover:bg-orange-100 transition-colors"
                         >
                           <Minus className="w-3.5 h-3.5" />
                         </button>
-                        <span className="font-bold text-xs sm:text-sm text-slate-900 min-w-[20px] text-center">
+                        <span className="font-extrabold text-xs sm:text-sm text-slate-900 min-w-[18px] text-center">
                           {inCart.quantity}
                         </span>
                         <button
@@ -873,7 +870,7 @@ export default function CustomerMenu({
                     ) : (
                       <button
                         onClick={() => addToCart(item)}
-                        className="px-3.5 py-1.5 rounded-xl bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-bold text-xs sm:text-sm transition-all shadow-xs flex items-center space-x-1"
+                        className="px-3.5 py-1.5 rounded-xl bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-black text-xs sm:text-sm transition-all shadow-xs flex items-center space-x-1 min-w-[65px] justify-center"
                       >
                         <Plus className="w-3.5 h-3.5" />
                         <span>ADD</span>
@@ -1015,18 +1012,18 @@ export default function CustomerMenu({
                       </div>
                     </div>
 
-                    <div className="mt-2">
-                      <h3 className="font-bold text-slate-900 text-xs sm:text-base leading-snug line-clamp-2 min-h-[2rem] sm:min-h-0">
+                    <div className="mt-2.5">
+                      <h3 className="font-black text-slate-900 text-xs sm:text-base leading-snug line-clamp-2 min-h-[2.4rem]">
                         {item.name}
                       </h3>
-                      <span className="text-[10px] sm:text-xs font-medium text-slate-400 block truncate">
+                      <span className="text-[10px] sm:text-xs font-semibold text-slate-400 block truncate mt-0.5">
                         {item.category_name}
                       </span>
                     </div>
 
-                    {/* Description (desktop / tablets) */}
+                    {/* Description */}
                     {item.description && (
-                      <p className="hidden sm:block text-xs text-slate-500 mt-2 line-clamp-2 leading-relaxed">
+                      <p className="text-[11px] sm:text-xs text-slate-500 mt-1 line-clamp-2 leading-relaxed">
                         {item.description}
                       </p>
                     )}
@@ -1035,8 +1032,7 @@ export default function CustomerMenu({
                   {/* Price & Action Row */}
                   <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-slate-100">
                     <div>
-                      <span className="hidden sm:block text-[10px] text-slate-400 font-medium">Price</span>
-                      <div className="font-extrabold text-sm sm:text-lg text-slate-900 leading-none">
+                      <div className="font-black text-sm sm:text-lg text-slate-900 leading-none">
                         ₹{item.price}
                       </div>
                     </div>
