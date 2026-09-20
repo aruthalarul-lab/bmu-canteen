@@ -28,6 +28,7 @@ export default function OperatorConsole() {
   const [posCart, setPosCart] = useState([]);
   const [posCustomerName, setPosCustomerName] = useState('');
   const [posCategory, setPosCategory] = useState('ALL');
+  const [posSearch, setPosSearch] = useState('');
   const [posSubmitting, setPosSubmitting] = useState(false);
   const [posLastPlacedToken, setPosLastPlacedToken] = useState(null);
 
@@ -1927,6 +1928,28 @@ export default function OperatorConsole() {
                 </div>
               )}
 
+              {/* Fast-POS Search Bar (just behind Today's Specials) */}
+              <div className="relative">
+                <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Search Chai, Samosa, Thali, Dosa..."
+                  value={posSearch}
+                  onChange={(e) => setPosSearch(e.target.value)}
+                  className="w-full pl-10 pr-9 py-2.5 rounded-2xl bg-white border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all shadow-xs"
+                />
+                {posSearch && (
+                  <button 
+                    type="button"
+                    onClick={() => setPosSearch('')} 
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-100 transition-colors"
+                    title="Clear search"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
               {/* Category Pills */}
               <div className="flex items-center space-x-2 overflow-x-auto pb-2 no-scrollbar">
                 <button
@@ -1957,15 +1980,41 @@ export default function OperatorConsole() {
               {/* Touch Item Grid - Scrollable on Mobile to keep ticket visible */}
               <div className="max-h-[38vh] sm:max-h-[46vh] lg:max-h-none overflow-y-auto overscroll-contain pr-1 custom-scrollbar">
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
-                  {menuItems
-                    .filter(i => posCategory === 'ALL' || String(i.category_id) === String(posCategory))
-                    .sort((a, b) => {
-                      if ((b.is_available === 1 ? 1 : 0) !== (a.is_available === 1 ? 1 : 0)) {
-                        return (b.is_available === 1 ? 1 : 0) - (a.is_available === 1 ? 1 : 0);
-                      }
-                      return (b.is_quick_item === 1 ? 1 : 0) - (a.is_quick_item === 1 ? 1 : 0);
-                    })
-                    .map(item => {
+                  {(() => {
+                    const filteredItems = menuItems
+                      .filter(i => posCategory === 'ALL' || String(i.category_id) === String(posCategory))
+                      .filter(i => {
+                        if (!posSearch.trim()) return true;
+                        const q = posSearch.toLowerCase().trim();
+                        return (
+                          (i.name || '').toLowerCase().includes(q) ||
+                          (i.category_name || '').toLowerCase().includes(q)
+                        );
+                      })
+                      .sort((a, b) => {
+                        if ((b.is_available === 1 ? 1 : 0) !== (a.is_available === 1 ? 1 : 0)) {
+                          return (b.is_available === 1 ? 1 : 0) - (a.is_available === 1 ? 1 : 0);
+                        }
+                        return (b.is_quick_item === 1 ? 1 : 0) - (a.is_quick_item === 1 ? 1 : 0);
+                      });
+
+                    if (filteredItems.length === 0) {
+                      return (
+                        <div className="col-span-2 sm:col-span-3 text-center py-8 px-4 bg-white rounded-2xl border border-dashed border-slate-200">
+                          <Search className="w-7 h-7 text-slate-300 mx-auto mb-1.5" />
+                          <p className="text-xs sm:text-sm font-bold text-slate-600">No items match "{posSearch}"</p>
+                          <button
+                            type="button"
+                            onClick={() => { setPosSearch(''); setPosCategory('ALL'); }}
+                            className="mt-2 text-xs text-orange-600 hover:text-orange-700 font-bold underline"
+                          >
+                            Reset Filters
+                          </button>
+                        </div>
+                      );
+                    }
+
+                    return filteredItems.map(item => {
                       const isAvailable = item.is_available === 1;
                       return (
                         <button
@@ -1997,7 +2046,8 @@ export default function OperatorConsole() {
                           </div>
                         </button>
                       );
-                    })}
+                    });
+                  })()}
                 </div>
               </div>
             </div>
