@@ -98,7 +98,7 @@ export default function PublicDisplay({ onExit }) {
                 </span>
               </div>
               <p className="text-[11px] sm:text-xs text-slate-400 hidden xs:block">
-                Pick up your order when your Token appears in green
+                Pick up your order when your Token appears in green • A Product of NULIFE
               </p>
             </div>
           </div>
@@ -260,7 +260,7 @@ export default function PublicDisplay({ onExit }) {
 
       {/* Bottom Ticker */}
       <footer className="pt-3 sm:pt-5 mt-3 sm:mt-4 border-t border-slate-900 flex flex-col sm:flex-row items-center justify-between text-[11px] sm:text-xs text-slate-500 gap-1 sm:gap-0">
-        <span>BMU Canteen OS • Live Kitchen Kiosk</span>
+        <span>BMU Canteen OS • A Product of NULIFE</span>
         <span>Please show your Token Number at Counter 1 for pickup</span>
       </footer>
     </div>

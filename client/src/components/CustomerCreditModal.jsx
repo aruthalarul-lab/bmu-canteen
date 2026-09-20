@@ -1252,7 +1252,7 @@ export default function CustomerCreditModal({ isOpen, onClose, initialTab = 'wal
         <div className="p-3.5 sm:p-4 bg-slate-50 border-t border-slate-200/80 flex items-center justify-between text-xs text-slate-500 shrink-0">
           <span className="flex items-center gap-1">
             <ShieldCheck className="w-4 h-4 text-emerald-600" />
-            <span>Secure & Verified via BMU Canteen OS</span>
+            <span>Secure & Verified • A Product of NULIFE</span>
           </span>
           <button onClick={onClose} className="px-4 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 font-bold text-slate-700 transition-colors">
             Close

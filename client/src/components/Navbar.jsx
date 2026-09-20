@@ -32,7 +32,7 @@ export default function Navbar({ currentView, setView, cartCount, setIsCartOpen,
                   BMU Canteen
                 </span>
                 <span className="text-[10px] text-slate-500 font-medium truncate hidden min-[360px]:inline">
-                  Smart Digital Food Court
+                  A Product of NULIFE
                 </span>
               </div>
             </div>

@@ -3405,7 +3405,7 @@ export default function OperatorConsole() {
                 className="cursor-default hover:text-slate-500 transition-colors"
                 title="System Version"
               >
-                BMU Canteen OS • v1.0.0
+                BMU Canteen OS • A Product of NULIFE • v1.0.0
               </span>
               <span className="flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
@@ -4789,7 +4789,7 @@ export default function OperatorConsole() {
 
                 {/* Direct Link Footer */}
                 <div className="text-[11px] text-slate-500 font-mono pt-0.5">
-                  bmu-canteen.onrender.com
+                  bmu-canteen.onrender.com • A Product of NULIFE
                 </div>
               </div>
 

@@ -1049,9 +1049,10 @@ export default function CustomerMenu({
           </div>
         )}
 
-        {/* Discreet Staff Portal Link */}
+        {/* Discreet Staff Portal Link & Brand Footer */}
         <div className="mt-16 text-center text-xs text-slate-400 border-t border-slate-200/60 pt-6 pb-6 space-y-1">
-          <p>© BMU Canteen • Fresh & Fast Office Dining</p>
+          <p className="font-semibold text-slate-500">© BMU Canteen • A Product of NULIFE</p>
+          <p className="text-[11px] text-slate-400">Fresh & Fast Campus Dining</p>
           <a
             href="/?view=operator"
             className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-slate-600 transition-colors mt-1"
