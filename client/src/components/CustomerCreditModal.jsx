@@ -505,7 +505,7 @@ export default function CustomerCreditModal({ isOpen, onClose, initialTab = 'wal
                     <input
                       type="text"
                       required
-                      placeholder="e.g. Arul"
+                      placeholder="e.g. Rahul Sharma"
                       value={activateName}
                       onChange={(e) => setActivateName(e.target.value)}
                       className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold focus:ring-2 focus:ring-emerald-500 bg-white shadow-xs"
@@ -519,7 +519,7 @@ export default function CustomerCreditModal({ isOpen, onClose, initialTab = 'wal
                       type="tel"
                       required
                       maxLength="10"
-                      placeholder="e.g. 9551713380"
+                      placeholder="e.g. 9876543210"
                       value={activatePhone}
                       onChange={(e) => setActivatePhone(e.target.value.replace(/\D/g, ''))}
                       className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-mono font-semibold focus:ring-2 focus:ring-emerald-500 bg-white shadow-xs"
@@ -1199,7 +1199,7 @@ export default function CustomerCreditModal({ isOpen, onClose, initialTab = 'wal
                         <input
                           type="text"
                           required
-                          placeholder="e.g. Arul"
+                          placeholder="e.g. Rahul Sharma"
                           value={activateName}
                           onChange={(e) => setActivateName(e.target.value)}
                           className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold focus:ring-2 focus:ring-emerald-500 bg-white shadow-xs"
@@ -1213,7 +1213,7 @@ export default function CustomerCreditModal({ isOpen, onClose, initialTab = 'wal
                           type="tel"
                           required
                           maxLength="10"
-                          placeholder="e.g. 9551713380"
+                          placeholder="e.g. 9876543210"
                           value={activatePhone}
                           onChange={(e) => setActivatePhone(e.target.value.replace(/\D/g, ''))}
                           className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-mono font-semibold focus:ring-2 focus:ring-emerald-500 bg-white shadow-xs"
