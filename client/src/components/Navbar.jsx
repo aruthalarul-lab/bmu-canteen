@@ -24,8 +24,14 @@ export default function Navbar({ currentView, setView, cartCount, setIsCartOpen,
               className="flex items-center space-x-2 sm:space-x-3 cursor-pointer shrink-0 min-w-0" 
               onClick={() => setView('customer')}
             >
-              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-orange-600 to-amber-500 flex items-center justify-center shadow-md shadow-orange-500/20 text-white shrink-0 text-base sm:text-xl select-none">
-                {settings?.canteen_logo || '🍽️'}
+              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-orange-600 to-amber-500 flex items-center justify-center shadow-md shadow-orange-500/20 text-white shrink-0 select-none">
+                {(!settings?.canteen_logo || settings?.canteen_logo === 'utensils' || settings?.canteen_logo === 'classic' || settings?.canteen_logo === 'original') ? (
+                  <Utensils className="w-4 h-4 sm:w-5 sm:h-5" />
+                ) : (settings?.canteen_logo === 'BMU' || settings?.canteen_logo === 'bmu') ? (
+                  <span className="font-black text-xs sm:text-sm tracking-wider">BMU</span>
+                ) : (
+                  <span className="text-base sm:text-xl leading-none">{settings.canteen_logo}</span>
+                )}
               </div>
               <div className="flex flex-col min-w-0">
                 <span className="font-black text-sm sm:text-lg tracking-tight text-slate-900 leading-tight truncate">

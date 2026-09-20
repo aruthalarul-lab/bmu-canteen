@@ -6,7 +6,7 @@ import {
   Flame, Sparkles, TrendingUp, CreditCard, Edit2, Search,
   Lock, Unlock, BookOpen, FileText, Users, Printer, Download, Upload,
   Receipt, Calendar, Filter, UserPlus, UserCheck, Phone, Star,
-  Wallet, Zap, Store
+  Wallet, Zap, Store, Utensils
 } from 'lucide-react';
 import { playNewOrderSound, playOrderReadySound } from '../utils/audio';
 import socket from '../services/socket';
@@ -36,7 +36,7 @@ export default function OperatorConsole() {
   const [settings, setSettings] = useState({
     canteen_name: 'BMU Canteen',
     canteen_tagline: 'A Product of NULIFE',
-    canteen_logo: '🍽️',
+    canteen_logo: 'utensils',
     upi_id: 'bmucanteen@upi',
     upi_name: 'BMU Office Canteen',
     operator_pin: '1513',
@@ -3128,52 +3128,110 @@ export default function OperatorConsole() {
 
                   <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
                     {/* Logo Picker & Custom Input */}
-                    <div className="sm:col-span-4 bg-slate-50/80 p-2.5 rounded-xl border border-slate-200/80 flex flex-col justify-between">
+                    <div className="sm:col-span-5 bg-slate-50/80 p-3 rounded-xl border border-slate-200/80 flex flex-col justify-between gap-2.5">
                       <div>
-                        <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
-                          Canteen Logo / Icon
-                        </label>
-                        <div className="flex items-center gap-2">
-                          <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-orange-500 to-amber-400 flex items-center justify-center text-2xl shadow-sm text-white shrink-0">
-                            {settings.canteen_logo || '🍽️'}
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="block text-[11px] font-bold text-slate-700 uppercase">
+                            Canteen Logo / Icon
+                          </label>
+                          <span className="text-[10px] text-slate-400 font-medium">Live Preview</span>
+                        </div>
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-orange-600 to-amber-500 flex items-center justify-center shadow-md shadow-orange-500/20 text-white shrink-0 select-none">
+                            {(!settings.canteen_logo || settings.canteen_logo === 'utensils' || settings.canteen_logo === 'classic' || settings.canteen_logo === 'original') ? (
+                              <Utensils className="w-5 h-5 text-white" />
+                            ) : (settings.canteen_logo === 'BMU' || settings.canteen_logo === 'bmu') ? (
+                              <span className="font-black text-xs tracking-wider text-white">BMU</span>
+                            ) : (
+                              <span className="text-2xl leading-none">{settings.canteen_logo}</span>
+                            )}
                           </div>
                           <div className="flex-1">
                             <input
                               type="text"
-                              maxLength={4}
-                              value={settings.canteen_logo || '🍽️'}
+                              maxLength={12}
+                              value={settings.canteen_logo || 'utensils'}
                               onChange={(e) => setSettings({ ...settings, canteen_logo: e.target.value })}
-                              className="w-full px-2 py-1.5 text-center text-base rounded-lg border border-slate-200 focus:ring-2 focus:ring-orange-500 focus:outline-none bg-white font-bold"
-                              placeholder="🍽️"
-                              title="Type custom emoji"
+                              className="w-full px-2 py-1.5 text-center text-xs font-bold rounded-lg border border-slate-200 focus:ring-2 focus:ring-orange-500 focus:outline-none bg-white"
+                              placeholder="utensils or emoji"
+                              title="Type custom emoji, 'utensils', or 'BMU'"
                             />
-                            <span className="text-[9px] text-slate-400 block text-center mt-0.5">Emoji / Icon</span>
+                            <span className="text-[9px] text-slate-400 block text-center mt-0.5">'utensils', 'BMU', or emoji</span>
                           </div>
                         </div>
                       </div>
 
-                      {/* Quick Emoji Badges */}
-                      <div className="flex items-center gap-1 mt-2 flex-wrap justify-center">
-                        {['🍽️', '☕', '🍔', '🍕', '🍛', '🥘', '🥤', '🍴'].map((emoji) => (
+                      {/* Quick Presets: Previous Original Logo + Popular Emojis */}
+                      <div className="space-y-1.5 pt-1.5 border-t border-slate-200/60">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold text-slate-500 uppercase">Presets:</span>
                           <button
-                            key={emoji}
                             type="button"
-                            onClick={() => setSettings({ ...settings, canteen_logo: emoji })}
-                            className={`w-6 h-6 rounded-md text-xs flex items-center justify-center border transition-all ${
-                              (settings.canteen_logo || '🍽️') === emoji
-                                ? 'bg-orange-100 border-orange-400 font-bold scale-110'
-                                : 'bg-white border-slate-200 hover:bg-slate-100'
+                            onClick={() => setSettings({ ...settings, canteen_logo: 'utensils' })}
+                            className={`px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1 border transition-all ${
+                              (!settings.canteen_logo || settings.canteen_logo === 'utensils' || settings.canteen_logo === 'classic' || settings.canteen_logo === 'original')
+                                ? 'bg-orange-500 text-white border-orange-600 shadow-xs'
+                                : 'bg-white text-orange-600 border-orange-200 hover:bg-orange-50'
                             }`}
-                            title={`Select ${emoji}`}
+                            title="Restore Previous / Original Canteen Cutlery Logo"
                           >
-                            {emoji}
+                            <Utensils className="w-3 h-3" />
+                            <span>Previous Logo</span>
                           </button>
-                        ))}
+                        </div>
+
+                        <div className="flex items-center gap-1 flex-wrap justify-start">
+                          {/* Previous Logo (Utensils) Button */}
+                          <button
+                            type="button"
+                            onClick={() => setSettings({ ...settings, canteen_logo: 'utensils' })}
+                            className={`px-2 py-1 rounded-lg text-xs flex items-center gap-1 border transition-all ${
+                              (!settings.canteen_logo || settings.canteen_logo === 'utensils' || settings.canteen_logo === 'classic' || settings.canteen_logo === 'original')
+                                ? 'bg-orange-500 text-white border-orange-600 font-bold shadow-xs'
+                                : 'bg-white border-slate-200 hover:bg-slate-100 text-slate-700'
+                            }`}
+                            title="Original Canteen Cutlery Icon"
+                          >
+                            <Utensils className="w-3.5 h-3.5" />
+                            <span className="text-[10px] font-bold">Original</span>
+                          </button>
+
+                          {/* BMU Badge Button */}
+                          <button
+                            type="button"
+                            onClick={() => setSettings({ ...settings, canteen_logo: 'BMU' })}
+                            className={`px-2 py-1 rounded-lg text-xs font-black border transition-all ${
+                              settings.canteen_logo === 'BMU'
+                                ? 'bg-orange-500 text-white border-orange-600 shadow-xs'
+                                : 'bg-white border-slate-200 hover:bg-slate-100 text-slate-700'
+                            }`}
+                            title="BMU Text Badge"
+                          >
+                            <span className="text-[10px]">BMU</span>
+                          </button>
+
+                          {/* Quick Emoji Badges */}
+                          {['🍽️', '☕', '🍔', '🍕', '🍛', '🥘', '🥤', '🍴'].map((emoji) => (
+                            <button
+                              key={emoji}
+                              type="button"
+                              onClick={() => setSettings({ ...settings, canteen_logo: emoji })}
+                              className={`w-7 h-7 rounded-lg text-sm flex items-center justify-center border transition-all ${
+                                settings.canteen_logo === emoji
+                                  ? 'bg-orange-100 border-orange-400 font-bold scale-105 shadow-xs'
+                                  : 'bg-white border-slate-200 hover:bg-slate-100'
+                              }`}
+                              title={`Select ${emoji}`}
+                            >
+                              {emoji}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     </div>
 
                     {/* Canteen Name & Tagline */}
-                    <div className="sm:col-span-8 flex flex-col justify-between gap-2.5">
+                    <div className="sm:col-span-7 flex flex-col justify-between gap-2.5">
                       <div>
                         <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
                           Canteen Name *

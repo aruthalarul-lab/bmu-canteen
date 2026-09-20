@@ -21,7 +21,7 @@ export default function App() {
   const [settings, setSettings] = useState({
     canteen_name: 'BMU Canteen',
     canteen_tagline: 'A Product of NULIFE',
-    canteen_logo: '🍽️',
+    canteen_logo: 'utensils',
   });
 
   // Fetch settings and subscribe to real-time settings updates

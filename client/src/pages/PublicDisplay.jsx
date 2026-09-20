@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChefHat, Bell, BellOff, CheckCircle2, Clock, X, Sparkles } from 'lucide-react';
+import { ChefHat, Bell, BellOff, CheckCircle2, Clock, X, Sparkles, Utensils } from 'lucide-react';
 import socket from '../services/socket';
 import { playOrderReadySound } from '../utils/audio';
 
@@ -12,7 +12,7 @@ export default function PublicDisplay({ onExit, settings: propSettings }) {
   const [settings, setSettings] = useState(() => propSettings || {
     canteen_name: 'BMU Canteen',
     canteen_tagline: 'A Product of NULIFE',
-    canteen_logo: '🍽️',
+    canteen_logo: 'utensils',
   });
 
   useEffect(() => {
@@ -121,8 +121,14 @@ export default function PublicDisplay({ onExit, settings: propSettings }) {
         {/* Brand & Status Row */}
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 sm:gap-3">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center font-black text-xl sm:text-2xl text-white shadow-lg shadow-orange-500/25 shrink-0 tracking-wider select-none">
-              {settings?.canteen_logo || '🍽️'}
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center font-black text-white shadow-lg shadow-orange-500/25 shrink-0 tracking-wider select-none">
+              {(!settings?.canteen_logo || settings?.canteen_logo === 'utensils' || settings?.canteen_logo === 'classic' || settings?.canteen_logo === 'original') ? (
+                <Utensils className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+              ) : (settings?.canteen_logo === 'BMU' || settings?.canteen_logo === 'bmu') ? (
+                <span className="text-sm sm:text-base font-black tracking-wider">BMU</span>
+              ) : (
+                <span className="text-xl sm:text-2xl leading-none">{settings.canteen_logo}</span>
+              )}
             </div>
             <div>
               <div className="flex items-center gap-2">
