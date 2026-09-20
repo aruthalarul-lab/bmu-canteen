@@ -180,7 +180,7 @@ function initDb() {
   // Initialize default settings if missing
   const insertSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
   insertSetting.run('canteen_name', 'BMU Canteen');
-  insertSetting.run('canteen_tagline', 'A Product of NULIFE');
+  insertSetting.run('canteen_tagline', 'Smart Food Court-Chat and eat');
   insertSetting.run('canteen_logo', 'utensils');
   insertSetting.run('upi_id', 'bmucanteen@upi');
   insertSetting.run('upi_name', 'BMU Office Canteen');
@@ -193,6 +193,7 @@ function initDb() {
   insertSetting.run('wa_template_wallet', '👛 *{canteen_name} - Prepaid Wallet*\n👤 *Customer:* {customer_name}\n💰 *Available Balance:* ₹{balance}\n\n_Recharge your wallet at the counter or scan UPI QR online!_');
   db.prepare("UPDATE settings SET value = '1513' WHERE key = 'operator_pin' AND value = '1234'").run();
   db.prepare("UPDATE settings SET value = 'utensils' WHERE key = 'canteen_logo' AND value = '🍽️'").run();
+  db.prepare("UPDATE settings SET value = 'Smart Food Court-Chat and eat' WHERE key = 'canteen_tagline' AND value = 'A Product of NULIFE'").run();
 
   // Seed categories if empty
   const catCount = db.prepare('SELECT COUNT(*) as count FROM categories').get();
@@ -346,7 +347,7 @@ function factoryResetDatabase() {
 
     // 5. Reset default canteen settings
     db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('canteen_name', 'BMU Canteen')").run();
-    db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('canteen_tagline', 'A Product of NULIFE')").run();
+    db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('canteen_tagline', 'Smart Food Court-Chat and eat')").run();
     db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('canteen_logo', 'utensils')").run();
     db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('upi_id', 'bmucanteen@upi')").run();
     db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('upi_name', 'BMU Office Canteen')").run();

@@ -20,7 +20,7 @@ export default function App() {
   // Global Canteen Branding Settings
   const [settings, setSettings] = useState({
     canteen_name: 'BMU Canteen',
-    canteen_tagline: 'A Product of NULIFE',
+    canteen_tagline: 'Smart Food Court-Chat and eat',
     canteen_logo: 'utensils',
   });
 
@@ -46,6 +46,10 @@ export default function App() {
       socket.off('settings-updated', handleSettingsUpdated);
     };
   }, []);
+
+  useEffect(() => {
+    document.title = `${settings?.canteen_name || 'BMU Canteen'} • ${settings?.canteen_tagline || 'Smart Food Court-Chat and eat'}`;
+  }, [settings?.canteen_name, settings?.canteen_tagline]);
 
   // Cart State with localStorage persistence
   const [cart, setCart] = useState(() => {

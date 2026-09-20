@@ -38,7 +38,7 @@ export default function Navbar({ currentView, setView, cartCount, setIsCartOpen,
                   {settings?.canteen_name || 'BMU Canteen'}
                 </span>
                 <span className="text-[10px] text-slate-500 font-medium truncate hidden min-[360px]:inline">
-                  {settings?.canteen_tagline || 'A Product of NULIFE'}
+                  {settings?.canteen_tagline || 'Smart Food Court-Chat and eat'}
                 </span>
               </div>
             </div>

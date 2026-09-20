@@ -41,7 +41,7 @@ export default function OperatorConsole() {
   // Settings State
   const [settings, setSettings] = useState({
     canteen_name: 'BMU Canteen',
-    canteen_tagline: 'A Product of NULIFE',
+    canteen_tagline: 'Smart Food Court-Chat and eat',
     canteen_logo: 'utensils',
     upi_id: 'bmucanteen@upi',
     upi_name: 'BMU Office Canteen',
@@ -3270,7 +3270,7 @@ export default function OperatorConsole() {
                           value={settings.canteen_tagline || ''}
                           onChange={(e) => setSettings({ ...settings, canteen_tagline: e.target.value })}
                           className="w-full px-3 py-1.5 sm:py-2 rounded-xl border border-slate-200 text-xs sm:text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none bg-slate-50/50 focus:bg-white transition-all"
-                          placeholder="e.g. A Product of NULIFE"
+                          placeholder="e.g. Smart Food Court-Chat and eat"
                         />
                         <p className="text-[10px] text-slate-400 mt-0.5">
                           Subheading displayed in top navigation bar and footer.
@@ -3755,7 +3755,7 @@ export default function OperatorConsole() {
                 className="cursor-default hover:text-slate-500 transition-colors"
                 title="System Version"
               >
-                {settings.canteen_name || 'BMU Canteen'} OS • {settings.canteen_tagline || 'A Product of NULIFE'} • v1.0.0
+                {settings.canteen_name || 'BMU Canteen'} OS • {settings.canteen_tagline || 'Smart Food Court-Chat and eat'} • v1.0.0
               </span>
               <span className="flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse"></span>

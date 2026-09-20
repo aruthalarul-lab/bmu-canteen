@@ -1052,7 +1052,7 @@ export default function CustomerMenu({
 
         {/* Discreet Staff Portal Link & Brand Footer */}
         <div className="mt-16 text-center text-xs text-slate-400 border-t border-slate-200/60 pt-6 pb-6 space-y-1">
-          <p className="font-semibold text-slate-500">© {settings?.canteen_name || 'BMU Canteen'} • {settings?.canteen_tagline || 'A Product of NULIFE'}</p>
+          <p className="font-semibold text-slate-500">© {settings?.canteen_name || 'BMU Canteen'} • {settings?.canteen_tagline || 'Smart Food Court-Chat and eat'}</p>
           <p className="text-[11px] text-slate-400">Fresh & Fast Campus Dining</p>
           <a
             href="/?view=operator"
