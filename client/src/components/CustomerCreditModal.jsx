@@ -9,6 +9,7 @@ import confetti from 'canvas-confetti';
 import UpiPaymentButtons from './UpiPaymentButtons';
 import WhatsAppIcon from './WhatsAppIcon';
 import socket from '../services/socket';
+import { formatWalletShareMessage } from '../utils/whatsapp';
 
 export default function CustomerCreditModal({ isOpen, onClose, initialTab = 'wallet', settings }) {
   const canteenName = settings?.canteen_name || 'BMU Canteen';
@@ -719,7 +720,10 @@ export default function CustomerCreditModal({ isOpen, onClose, initialTab = 'wal
                           onClick={() => {
                             const name = accountData.account.customer_name;
                             const bal = currentWalletBalance;
-                            const msg = `👛 *${canteenName} - Prepaid Wallet*\n👤 *Customer:* ${name}\n💰 *Available Balance:* ₹${bal}\n\n_Recharge your wallet at the counter or scan UPI QR online!_`;
+                            const msg = formatWalletShareMessage({
+                              account: { customer_name: name, wallet_balance: bal },
+                              settings
+                            });
                             window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
                           }}
                           className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs active:scale-95 transition-all flex items-center gap-1.5"

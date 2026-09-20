@@ -187,6 +187,10 @@ function initDb() {
   insertSetting.run('is_open', '1');
   insertSetting.run('operator_pin', '1513');
   insertSetting.run('wallet_recharge_mode', 'option_a');
+  insertSetting.run('wa_template_order_ready', '🎉 Hi *{customer_name}*,\n\nYour order (*Token #{token_no}*) is *READY FOR PICKUP* at *{canteen_name}* Counter 1! 🍲🔥\n\nPlease collect your fresh food at the counter. Enjoy your meal! 🙏');
+  insertSetting.run('wa_template_due_reminder', '👋 Hi *{customer_name}*,\n\nGreetings from *{canteen_name}*! 🍲\n\nThis is a gentle reminder that your current outstanding canteen credit balance is *₹{balance}*.{order_breakdown}\n\n💳 *Pay Instantly via UPI:*\n• *UPI ID:* `{upi_id}`\n• *Quick Pay Link:* {upi_pay_link}\n\n_Please reply with your transaction UTR or payment screenshot once paid. Thank you!_ 🙏');
+  insertSetting.run('wa_template_specials', '🌟 *{canteen_name} — Today\'s Specials!* 🌟\n📅 _{date}_\n\n🔥 *Chef\'s Fresh Picks for Today:*\n{specials_list}\n\n⚡ *Skip the line & order online:*\n👉 {order_url}\n\n_Quick pickup at Counter 1! Have a delicious meal!_ 😋🍲');
+  insertSetting.run('wa_template_wallet', '👛 *{canteen_name} - Prepaid Wallet*\n👤 *Customer:* {customer_name}\n💰 *Available Balance:* ₹{balance}\n\n_Recharge your wallet at the counter or scan UPI QR online!_');
   db.prepare("UPDATE settings SET value = '1513' WHERE key = 'operator_pin' AND value = '1234'").run();
   db.prepare("UPDATE settings SET value = 'utensils' WHERE key = 'canteen_logo' AND value = '🍽️'").run();
 

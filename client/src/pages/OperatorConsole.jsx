@@ -6,13 +6,19 @@ import {
   Flame, Sparkles, TrendingUp, CreditCard, Edit2, Search,
   Lock, Unlock, BookOpen, FileText, Users, Printer, Download, Upload,
   Receipt, Calendar, Filter, UserPlus, UserCheck, Phone, Star,
-  Wallet, Zap, Store, Utensils
+  Wallet, Zap, Store, Utensils, MessageSquare, Send, RotateCcw
 } from 'lucide-react';
 import { playNewOrderSound, playOrderReadySound } from '../utils/audio';
 import socket from '../services/socket';
 import WhatsAppIcon from '../components/WhatsAppIcon';
 import MenuIconPicker from '../components/MenuIconPicker';
-import { sendWhatsAppDueReminder, shareSpecialsWhatsApp, sendOrderReadyWhatsApp } from '../utils/whatsapp';
+import { 
+  sendWhatsAppDueReminder, 
+  shareSpecialsWhatsApp, 
+  sendOrderReadyWhatsApp, 
+  DEFAULT_WA_TEMPLATES, 
+  getSampleWhatsAppMessage 
+} from '../utils/whatsapp';
 
 export default function OperatorConsole() {
   const [tab, setTab] = useState('queue'); // 'queue', 'pos', 'stock', 'settings'
@@ -41,9 +47,14 @@ export default function OperatorConsole() {
     upi_name: 'BMU Office Canteen',
     operator_pin: '1513',
     wallet_recharge_mode: 'option_a',
+    wa_template_order_ready: '',
+    wa_template_due_reminder: '',
+    wa_template_specials: '',
+    wa_template_wallet: '',
   });
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsCategory, setSettingsCategory] = useState('ALL');
+  const [waSettingsTab, setWaSettingsTab] = useState('order_ready'); // 'order_ready', 'due_reminder', 'specials', 'wallet'
 
   // Operator Security PIN State
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
@@ -3083,6 +3094,7 @@ export default function OperatorConsole() {
                 { id: 'ALL', label: 'All Settings', icon: Settings },
                 { id: 'profile', label: 'Canteen Profile', icon: Store },
                 { id: 'payments', label: 'UPI & Payments', icon: DollarSign },
+                { id: 'whatsapp', label: 'WhatsApp Alerts', icon: MessageSquare },
                 { id: 'wallet', label: 'Wallet Mode', icon: Wallet },
                 { id: 'security', label: 'Security PIN', icon: Lock },
                 { id: 'standee', label: 'QR Standees', icon: QrCode },
@@ -3320,6 +3332,213 @@ export default function OperatorConsole() {
                       </p>
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* Category: WhatsApp Message Settings */}
+              {(settingsCategory === 'ALL' || settingsCategory === 'whatsapp') && (
+                <div className="bg-white rounded-2xl p-3.5 sm:p-4 border border-slate-200 shadow-xs space-y-3.5">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                        <WhatsAppIcon className="w-3.5 h-3.5 fill-emerald-600" />
+                      </div>
+                      <div>
+                        <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 flex items-center gap-1.5">
+                          <span>WhatsApp Message Settings</span>
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                            See & Edit Templates
+                          </span>
+                        </h3>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      Customizable
+                    </span>
+                  </div>
+
+                  <p className="text-[11px] text-slate-500">
+                    See and edit the automated WhatsApp messages sent to customers. Click any tag below to insert dynamic variables into the message template.
+                  </p>
+
+                  {/* 4 Template Category Tabs */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+                    {[
+                      { id: 'order_ready', label: 'Order Ready', icon: '🔔', desc: 'Sent when order is ready for pickup' },
+                      { id: 'due_reminder', label: 'Due Reminder', icon: '🧾', desc: 'Sent for credit ledger balance & UPI payment link' },
+                      { id: 'specials', label: 'Today\'s Specials', icon: '⭐', desc: 'Broadcast daily menu to WhatsApp groups / status' },
+                      { id: 'wallet', label: 'Wallet Statement', icon: '👛', desc: 'Shared with customer wallet balance & passbook' },
+                    ].map(tabItem => (
+                      <button
+                        key={tabItem.id}
+                        type="button"
+                        onClick={() => setWaSettingsTab(tabItem.id)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 ${
+                          waSettingsTab === tabItem.id
+                            ? 'bg-emerald-600 text-white shadow-xs'
+                            : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200/60'
+                        }`}
+                        title={tabItem.desc}
+                      >
+                        <span>{tabItem.icon}</span>
+                        <span>{tabItem.label}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Active Template Editor & Live Preview Grid */}
+                  {(() => {
+                    const templateKey = 'wa_template_' + waSettingsTab;
+                    const hasCustom = settings[templateKey] !== undefined && settings[templateKey] !== null && settings[templateKey] !== '';
+                    const currentTemplateValue = hasCustom ? settings[templateKey] : (DEFAULT_WA_TEMPLATES[waSettingsTab] || '');
+                    const samplePreviewText = getSampleWhatsAppMessage(waSettingsTab, currentTemplateValue, settings);
+
+                    const variableChipsMap = {
+                      order_ready: [
+                        { tag: '{customer_name}', label: 'Customer Name' },
+                        { tag: '{token_no}', label: 'Token #' },
+                        { tag: '{canteen_name}', label: 'Canteen Name' },
+                        { tag: '{items_list}', label: 'Items List' },
+                        { tag: '{total_amount}', label: 'Total ₹' },
+                      ],
+                      due_reminder: [
+                        { tag: '{customer_name}', label: 'Customer Name' },
+                        { tag: '{balance}', label: 'Due Balance' },
+                        { tag: '{canteen_name}', label: 'Canteen Name' },
+                        { tag: '{upi_id}', label: 'Merchant UPI ID' },
+                        { tag: '{upi_pay_link}', label: 'Instant Pay Link' },
+                        { tag: '{order_breakdown}', label: 'Delivered Items List' },
+                      ],
+                      specials: [
+                        { tag: '{canteen_name}', label: 'Canteen Name' },
+                        { tag: '{date}', label: 'Today\'s Date' },
+                        { tag: '{specials_list}', label: 'Specials Items' },
+                        { tag: '{order_url}', label: 'Ordering Website Link' },
+                      ],
+                      wallet: [
+                        { tag: '{customer_name}', label: 'Customer Name' },
+                        { tag: '{balance}', label: 'Wallet Balance' },
+                        { tag: '{canteen_name}', label: 'Canteen Name' },
+                      ],
+                    };
+
+                    const currentVariables = variableChipsMap[waSettingsTab] || [];
+
+                    const handleInsertVar = (tag) => {
+                      const updated = (currentTemplateValue ? currentTemplateValue + ' ' : '') + tag;
+                      setSettings({ ...settings, [templateKey]: updated });
+                    };
+
+                    const handleResetTemplate = () => {
+                      setSettings({ ...settings, [templateKey]: DEFAULT_WA_TEMPLATES[waSettingsTab] || '' });
+                    };
+
+                    const handleTestSend = () => {
+                      window.open(`https://wa.me/?text=${encodeURIComponent(samplePreviewText)}`, '_blank');
+                    };
+
+                    return (
+                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 pt-1">
+                        {/* Left Column: Template Editor */}
+                        <div className="lg:col-span-7 space-y-2.5 flex flex-col justify-between">
+                          <div>
+                            <div className="flex items-center justify-between mb-1.5">
+                              <label className="block text-[11px] font-bold text-slate-700 uppercase">
+                                Message Template Text
+                              </label>
+                              <div className="flex items-center gap-1.5">
+                                {hasCustom && (
+                                  <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                    Customized
+                                  </span>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={handleResetTemplate}
+                                  className="text-[10px] text-slate-500 hover:text-slate-800 font-bold flex items-center gap-1 hover:underline transition-all"
+                                  title="Reset this template back to original default"
+                                >
+                                  <RotateCcw className="w-2.5 h-2.5" />
+                                  <span>Reset to Default</span>
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Variable Insertion Chips */}
+                            <div className="mb-2 p-2 bg-slate-50 rounded-xl border border-slate-200/80">
+                              <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                                Click Tag to Insert:
+                              </span>
+                              <div className="flex flex-wrap gap-1">
+                                {currentVariables.map(v => (
+                                  <button
+                                    key={v.tag}
+                                    type="button"
+                                    onClick={() => handleInsertVar(v.tag)}
+                                    className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-white text-emerald-700 border border-emerald-300 hover:bg-emerald-50 active:scale-95 transition-all shadow-xs"
+                                    title={`Insert ${v.label}`}
+                                  >
+                                    + {v.tag}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Template Text Area */}
+                            <textarea
+                              rows={7}
+                              value={currentTemplateValue}
+                              onChange={(e) => setSettings({ ...settings, [templateKey]: e.target.value })}
+                              className="w-full p-3 rounded-xl border border-slate-300 text-xs font-mono focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white text-slate-900 leading-relaxed shadow-xs"
+                              placeholder="Type WhatsApp message template..."
+                            />
+                          </div>
+
+                          <div className="flex items-center justify-between pt-1 text-[11px] text-slate-400">
+                            <span>Use *bold*, _italics_, and emojis anywhere in text.</span>
+                            <button
+                              type="button"
+                              onClick={handleTestSend}
+                              className="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold border border-emerald-200 transition-all flex items-center gap-1 active:scale-95 text-xs shadow-xs"
+                              title="Send sample test message to WhatsApp"
+                            >
+                              <Send className="w-3 h-3" />
+                              <span>Test Message</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Right Column: Live WhatsApp Chat Bubble Preview */}
+                        <div className="lg:col-span-5 bg-slate-50 p-3 rounded-2xl border border-slate-200 flex flex-col justify-between">
+                          <div>
+                            <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-200/80 text-[11px] font-bold text-slate-700">
+                              <span className="flex items-center gap-1">
+                                <WhatsAppIcon className="w-3 h-3 fill-emerald-600" />
+                                <span>Live WhatsApp Preview</span>
+                              </span>
+                              <span className="text-[10px] text-slate-400 font-normal">Customer View</span>
+                            </div>
+
+                            {/* Simulated WhatsApp Chat Bubble */}
+                            <div className="bg-[#E7FCE8] p-3 rounded-2xl rounded-tl-xs border border-emerald-200/90 shadow-sm relative space-y-1">
+                              <p className="text-xs text-slate-800 whitespace-pre-wrap font-sans leading-relaxed break-words">
+                                {samplePreviewText}
+                              </p>
+                              <div className="flex items-center justify-end gap-1 text-[9px] text-emerald-700/70 pt-1 select-none font-sans">
+                                <span>12:45 PM</span>
+                                <span className="font-bold text-emerald-600">✓✓</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="mt-2 text-[10px] text-slate-400 flex items-center justify-between">
+                            <span>Preview uses sample customer & token details</span>
+                            <span className="text-emerald-700 font-medium">Real-time sync</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
 
