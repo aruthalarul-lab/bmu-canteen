@@ -10,7 +10,8 @@ import UpiPaymentButtons from './UpiPaymentButtons';
 import WhatsAppIcon from './WhatsAppIcon';
 import socket from '../services/socket';
 
-export default function CustomerCreditModal({ isOpen, onClose, initialTab = 'wallet' }) {
+export default function CustomerCreditModal({ isOpen, onClose, initialTab = 'wallet', settings }) {
+  const canteenName = settings?.canteen_name || 'BMU Canteen';
   const [activeMode, setActiveMode] = useState(initialTab); // 'wallet' or 'credit'
   const [query, setQuery] = useState(() => {
     return localStorage.getItem('bmu_customer_phone') || localStorage.getItem('bmu_customer_name') || '';
@@ -406,7 +407,7 @@ export default function CustomerCreditModal({ isOpen, onClose, initialTab = 'wal
               </div>
               <div>
                 <h2 className="font-extrabold text-base sm:text-lg tracking-tight">
-                  {activeMode === 'wallet' ? 'BMU Canteen - Prepaid Wallet' : 'Staff Credit Dues'}
+                  {activeMode === 'wallet' ? `${canteenName} - Prepaid Wallet` : 'Staff Credit Dues'}
                 </h2>
                 <p className="text-[11px] text-slate-300">
                   {activeMode === 'wallet' 
@@ -718,7 +719,7 @@ export default function CustomerCreditModal({ isOpen, onClose, initialTab = 'wal
                           onClick={() => {
                             const name = accountData.account.customer_name;
                             const bal = currentWalletBalance;
-                            const msg = `👛 *BMU Canteen - Prepaid Wallet*\n👤 *Customer:* ${name}\n💰 *Available Balance:* ₹${bal}\n\n_Recharge your wallet at the counter or scan UPI QR online!_`;
+                            const msg = `👛 *${canteenName} - Prepaid Wallet*\n👤 *Customer:* ${name}\n💰 *Available Balance:* ₹${bal}\n\n_Recharge your wallet at the counter or scan UPI QR online!_`;
                             window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
                           }}
                           className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs active:scale-95 transition-all flex items-center gap-1.5"
@@ -742,7 +743,7 @@ export default function CustomerCreditModal({ isOpen, onClose, initialTab = 'wal
                             const name = accountData.account.customer_name;
                             const bal = currentCreditDues;
                             const upiId = 'bmucanteen@upi';
-                            const msg = `🧾 *BMU Canteen Credit Statement*\n👤 *Name:* ${name}\n💰 *Total Dues:* ₹${bal}\n\n💳 *Pay via UPI:* ${upiId}\n\n_Thank you!_`;
+                            const msg = `🧾 *${canteenName} Credit Statement*\n👤 *Name:* ${name}\n💰 *Total Dues:* ₹${bal}\n\n💳 *Pay via UPI:* ${upiId}\n\n_Thank you!_`;
                             window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
                           }}
                           className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs active:scale-95 transition-all flex items-center gap-1.5"
@@ -774,7 +775,7 @@ export default function CustomerCreditModal({ isOpen, onClose, initialTab = 'wal
                         <PlusCircle className="w-4 h-4 text-white" />
                       </div>
                       <div>
-                        <h3 className="font-extrabold text-sm text-slate-900">Recharge BMU Canteen Wallet</h3>
+                        <h3 className="font-extrabold text-sm text-slate-900">Recharge {canteenName} Wallet</h3>
                         <p className="text-[11px] text-slate-500">Scan dynamic UPI QR & submit 12-digit UTR for cashier verification</p>
                       </div>
                     </div>

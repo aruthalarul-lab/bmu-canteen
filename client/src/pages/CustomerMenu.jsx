@@ -23,7 +23,8 @@ export default function CustomerMenu({
   isCartOpen, 
   setIsCartOpen,
   activeOrder,
-  setActiveOrder
+  setActiveOrder,
+  settings
 }) {
   const cart = Array.isArray(rawCart) ? rawCart : [];
   const [categories, setCategories] = useState([]);
@@ -357,7 +358,7 @@ export default function CustomerMenu({
                   </span>
                 </div>
                 <p className="text-xs text-emerald-100">
-                  Thank you for dining with BMU Canteen. Enjoy your meal!
+                  Thank you for dining with {settings?.canteen_name || 'BMU Canteen'}. Enjoy your meal!
                 </p>
               </div>
             </div>
@@ -466,7 +467,7 @@ export default function CustomerMenu({
                     <Wallet className="w-4 h-4" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-xs sm:text-sm font-black text-white truncate">BMU Canteen - Prepaid Wallet</p>
+                    <p className="text-xs sm:text-sm font-black text-white truncate">{settings?.canteen_name || 'BMU Canteen'} - Prepaid Wallet</p>
                     <p className="text-[11px] text-emerald-300 font-semibold truncate">
                       {userWalletBalance > 0 ? `Available: ₹${userWalletBalance} • 1-Tap Pay` : '1-Tap Fast Checkout • Instant QR Top-Up'}
                     </p>
@@ -500,7 +501,7 @@ export default function CustomerMenu({
                 <button
                   onClick={() => shareSpecialsWhatsApp({ 
                     specials: specialItems, 
-                    canteenName: 'BMU Canteen' 
+                    canteenName: settings?.canteen_name || 'BMU Canteen' 
                   })}
                   className="px-2.5 py-1 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white text-[11px] font-bold flex items-center gap-1 shadow-xs transition-all"
                   title="Broadcast Today's Specials on WhatsApp"
@@ -1051,7 +1052,7 @@ export default function CustomerMenu({
 
         {/* Discreet Staff Portal Link & Brand Footer */}
         <div className="mt-16 text-center text-xs text-slate-400 border-t border-slate-200/60 pt-6 pb-6 space-y-1">
-          <p className="font-semibold text-slate-500">© BMU Canteen • A Product of NULIFE</p>
+          <p className="font-semibold text-slate-500">© {settings?.canteen_name || 'BMU Canteen'} • {settings?.canteen_tagline || 'A Product of NULIFE'}</p>
           <p className="text-[11px] text-slate-400">Fresh & Fast Campus Dining</p>
           <a
             href="/?view=operator"
@@ -1266,7 +1267,7 @@ export default function CustomerMenu({
                           <div className="flex items-center justify-between">
                             <div className="font-bold flex items-center gap-1.5 text-emerald-900">
                               <Wallet className="w-4 h-4 text-emerald-600 shrink-0" />
-                              <span>BMU Canteen - Prepaid Wallet Checkout</span>
+                              <span>{settings?.canteen_name || 'BMU Canteen'} - Prepaid Wallet Checkout</span>
                             </div>
                             <button
                               type="button"
@@ -1550,6 +1551,7 @@ export default function CustomerMenu({
         isOpen={showCreditModal}
         onClose={() => setShowCreditModal(false)}
         initialTab={creditModalTab}
+        settings={settings}
       />
     </div>
   );

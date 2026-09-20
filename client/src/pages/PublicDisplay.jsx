@@ -3,10 +3,47 @@ import { ChefHat, Bell, BellOff, CheckCircle2, Clock, X, Sparkles } from 'lucide
 import socket from '../services/socket';
 import { playOrderReadySound } from '../utils/audio';
 
-export default function PublicDisplay({ onExit }) {
+export default function PublicDisplay({ onExit, settings: propSettings }) {
   const [orders, setOrders] = useState([]);
   const [currentTime, setCurrentTime] = useState(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
   const [soundEnabled, setSoundEnabled] = useState(false);
+
+  // Canteen Branding Settings
+  const [settings, setSettings] = useState(() => propSettings || {
+    canteen_name: 'BMU Canteen',
+    canteen_tagline: 'A Product of NULIFE',
+    canteen_logo: '🍽️',
+  });
+
+  useEffect(() => {
+    if (propSettings) {
+      setSettings(propSettings);
+    }
+  }, [propSettings]);
+
+  useEffect(() => {
+    if (!propSettings) {
+      fetch('/api/settings')
+        .then(res => res.json())
+        .then(data => {
+          if (data && typeof data === 'object') {
+            setSettings(prev => ({ ...prev, ...data }));
+          }
+        })
+        .catch(err => console.warn('Could not load settings in PublicDisplay:', err));
+    }
+
+    const handleSettingsUpdated = (updated) => {
+      if (updated && typeof updated === 'object') {
+        setSettings(prev => ({ ...prev, ...updated }));
+      }
+    };
+
+    socket.on('settings-updated', handleSettingsUpdated);
+    return () => {
+      socket.off('settings-updated', handleSettingsUpdated);
+    };
+  }, [propSettings]);
 
   // Fallback exit handler if onExit is not supplied
   const handleExit = () => {
@@ -84,13 +121,13 @@ export default function PublicDisplay({ onExit }) {
         {/* Brand & Status Row */}
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 sm:gap-3">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center font-black text-sm sm:text-base text-white shadow-lg shadow-orange-500/25 shrink-0 tracking-wider">
-              BMU
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center font-black text-xl sm:text-2xl text-white shadow-lg shadow-orange-500/25 shrink-0 tracking-wider select-none">
+              {settings?.canteen_logo || '🍽️'}
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-base sm:text-2xl md:text-3xl font-black tracking-tight text-white leading-tight">
-                  BMU Canteen
+                  {settings?.canteen_name || 'BMU Canteen'}
                 </h1>
                 <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-[10px] sm:text-xs font-bold text-emerald-400 shrink-0">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
@@ -98,7 +135,7 @@ export default function PublicDisplay({ onExit }) {
                 </span>
               </div>
               <p className="text-[11px] sm:text-xs text-slate-400 hidden xs:block">
-                Pick up your order when your Token appears in green • A Product of NULIFE
+                Pick up your order when your Token appears in green • {settings?.canteen_tagline || 'A Product of NULIFE'}
               </p>
             </div>
           </div>
@@ -260,7 +297,7 @@ export default function PublicDisplay({ onExit }) {
 
       {/* Bottom Ticker */}
       <footer className="pt-3 sm:pt-5 mt-3 sm:mt-4 border-t border-slate-900 flex flex-col sm:flex-row items-center justify-between text-[11px] sm:text-xs text-slate-500 gap-1 sm:gap-0">
-        <span>BMU Canteen OS • A Product of NULIFE</span>
+        <span>{settings?.canteen_name || 'BMU Canteen'} OS • {settings?.canteen_tagline || 'A Product of NULIFE'}</span>
         <span>Please show your Token Number at Counter 1 for pickup</span>
       </footer>
     </div>

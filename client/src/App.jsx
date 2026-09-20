@@ -17,6 +17,36 @@ export default function App() {
   const [currentView, setCurrentView] = useState(getInitialView);
   const [isConnected, setIsConnected] = useState(socket.connected);
 
+  // Global Canteen Branding Settings
+  const [settings, setSettings] = useState({
+    canteen_name: 'BMU Canteen',
+    canteen_tagline: 'A Product of NULIFE',
+    canteen_logo: '🍽️',
+  });
+
+  // Fetch settings and subscribe to real-time settings updates
+  useEffect(() => {
+    fetch('/api/settings')
+      .then(res => res.json())
+      .then(data => {
+        if (data && typeof data === 'object') {
+          setSettings(prev => ({ ...prev, ...data }));
+        }
+      })
+      .catch(err => console.warn('Could not load settings in App:', err));
+
+    const handleSettingsUpdated = (updated) => {
+      if (updated && typeof updated === 'object') {
+        setSettings(prev => ({ ...prev, ...updated }));
+      }
+    };
+
+    socket.on('settings-updated', handleSettingsUpdated);
+    return () => {
+      socket.off('settings-updated', handleSettingsUpdated);
+    };
+  }, []);
+
   // Cart State with localStorage persistence
   const [cart, setCart] = useState(() => {
     try {
@@ -161,7 +191,7 @@ export default function App() {
 
   // If in TV Display mode, show dedicated kiosk board with integrated exit button
   if (currentView === 'display') {
-    return <PublicDisplay onExit={handleExitDisplay} />;
+    return <PublicDisplay onExit={handleExitDisplay} settings={settings} />;
   }
 
   return (
@@ -172,6 +202,7 @@ export default function App() {
         cartCount={totalCartCount}
         setIsCartOpen={setIsCartOpen}
         isConnected={isConnected}
+        settings={settings}
       />
 
       <main className="flex-1">
@@ -186,6 +217,7 @@ export default function App() {
             setIsCartOpen={setIsCartOpen}
             activeOrder={activeOrder}
             setActiveOrder={setActiveOrder}
+            settings={settings}
           />
         )}
 

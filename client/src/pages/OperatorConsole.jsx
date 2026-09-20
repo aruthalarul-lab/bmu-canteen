@@ -35,6 +35,8 @@ export default function OperatorConsole() {
   // Settings State
   const [settings, setSettings] = useState({
     canteen_name: 'BMU Canteen',
+    canteen_tagline: 'A Product of NULIFE',
+    canteen_logo: '🍽️',
     upi_id: 'bmucanteen@upi',
     upi_name: 'BMU Office Canteen',
     operator_pin: '1513',
@@ -3124,33 +3126,86 @@ export default function OperatorConsole() {
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
-                        Canteen Name
-                      </label>
-                      <input
-                        type="text"
-                        value={settings.canteen_name}
-                        onChange={(e) => setSettings({ ...settings, canteen_name: e.target.value })}
-                        className="w-full px-3 py-1.5 sm:py-2 rounded-xl border border-slate-200 text-xs sm:text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none bg-slate-50/50 focus:bg-white transition-all"
-                        placeholder="e.g. BMU Canteen"
-                      />
-                      <p className="text-[10px] text-slate-400 mt-0.5">Appears on receipt tokens and customer screens.</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                    {/* Logo Picker & Custom Input */}
+                    <div className="sm:col-span-4 bg-slate-50/80 p-2.5 rounded-xl border border-slate-200/80 flex flex-col justify-between">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                          Canteen Logo / Icon
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-orange-500 to-amber-400 flex items-center justify-center text-2xl shadow-sm text-white shrink-0">
+                            {settings.canteen_logo || '🍽️'}
+                          </div>
+                          <div className="flex-1">
+                            <input
+                              type="text"
+                              maxLength={4}
+                              value={settings.canteen_logo || '🍽️'}
+                              onChange={(e) => setSettings({ ...settings, canteen_logo: e.target.value })}
+                              className="w-full px-2 py-1.5 text-center text-base rounded-lg border border-slate-200 focus:ring-2 focus:ring-orange-500 focus:outline-none bg-white font-bold"
+                              placeholder="🍽️"
+                              title="Type custom emoji"
+                            />
+                            <span className="text-[9px] text-slate-400 block text-center mt-0.5">Emoji / Icon</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Quick Emoji Badges */}
+                      <div className="flex items-center gap-1 mt-2 flex-wrap justify-center">
+                        {['🍽️', '☕', '🍔', '🍕', '🍛', '🥘', '🥤', '🍴'].map((emoji) => (
+                          <button
+                            key={emoji}
+                            type="button"
+                            onClick={() => setSettings({ ...settings, canteen_logo: emoji })}
+                            className={`w-6 h-6 rounded-md text-xs flex items-center justify-center border transition-all ${
+                              (settings.canteen_logo || '🍽️') === emoji
+                                ? 'bg-orange-100 border-orange-400 font-bold scale-110'
+                                : 'bg-white border-slate-200 hover:bg-slate-100'
+                            }`}
+                            title={`Select ${emoji}`}
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
                     </div>
 
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
-                        Merchant Display Name
-                      </label>
-                      <input
-                        type="text"
-                        value={settings.upi_name}
-                        onChange={(e) => setSettings({ ...settings, upi_name: e.target.value })}
-                        className="w-full px-3 py-1.5 sm:py-2 rounded-xl border border-slate-200 text-xs sm:text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none bg-slate-50/50 focus:bg-white transition-all"
-                        placeholder="e.g. BMU Office Canteen"
-                      />
-                      <p className="text-[10px] text-slate-400 mt-0.5">Payee name displayed inside customer UPI apps.</p>
+                    {/* Canteen Name & Tagline */}
+                    <div className="sm:col-span-8 flex flex-col justify-between gap-2.5">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                          Canteen Name *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={settings.canteen_name || ''}
+                          onChange={(e) => setSettings({ ...settings, canteen_name: e.target.value })}
+                          className="w-full px-3 py-1.5 sm:py-2 rounded-xl border border-slate-200 text-xs sm:text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none bg-slate-50/50 focus:bg-white transition-all font-bold text-slate-900"
+                          placeholder="e.g. BMU Canteen"
+                        />
+                        <p className="text-[10px] text-slate-400 mt-0.5">
+                          Shown on header, tokens, TV board, and printed receipts.
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                          Canteen Tagline / Slogan
+                        </label>
+                        <input
+                          type="text"
+                          value={settings.canteen_tagline || ''}
+                          onChange={(e) => setSettings({ ...settings, canteen_tagline: e.target.value })}
+                          className="w-full px-3 py-1.5 sm:py-2 rounded-xl border border-slate-200 text-xs sm:text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none bg-slate-50/50 focus:bg-white transition-all"
+                          placeholder="e.g. A Product of NULIFE"
+                        />
+                        <p className="text-[10px] text-slate-400 mt-0.5">
+                          Subheading displayed in top navigation bar and footer.
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -3165,7 +3220,7 @@ export default function OperatorConsole() {
                         <DollarSign className="w-3.5 h-3.5" />
                       </div>
                       <h3 className="text-xs sm:text-sm font-extrabold text-slate-900">
-                        UPI Payment Routing
+                        UPI Payment Routing & Merchant Details
                       </h3>
                     </div>
                     <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
@@ -3173,21 +3228,39 @@ export default function OperatorConsole() {
                     </span>
                   </div>
 
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
-                      Merchant UPI ID (VPA) *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. yourname@okaxis or canteen@upi"
-                      value={settings.upi_id}
-                      onChange={(e) => setSettings({ ...settings, upi_id: e.target.value })}
-                      className="w-full px-3 py-1.5 sm:py-2 rounded-xl border border-slate-200 text-xs sm:text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none font-mono bg-slate-50/50 focus:bg-white transition-all"
-                    />
-                    <p className="text-[10px] text-slate-400 mt-1">
-                      All online orders and wallet top-ups generate dynamic UPI QR codes pointing to this UPI ID.
-                    </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                        Merchant UPI ID (VPA) *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. yourname@okaxis or canteen@upi"
+                        value={settings.upi_id || ''}
+                        onChange={(e) => setSettings({ ...settings, upi_id: e.target.value })}
+                        className="w-full px-3 py-1.5 sm:py-2 rounded-xl border border-slate-200 text-xs sm:text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none font-mono bg-slate-50/50 focus:bg-white transition-all"
+                      />
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        All customer scan-to-pay QR codes route payments directly to this UPI ID.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                        Merchant Display Name (Payee Name)
+                      </label>
+                      <input
+                        type="text"
+                        value={settings.upi_name || ''}
+                        onChange={(e) => setSettings({ ...settings, upi_name: e.target.value })}
+                        className="w-full px-3 py-1.5 sm:py-2 rounded-xl border border-slate-200 text-xs sm:text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none bg-slate-50/50 focus:bg-white transition-all"
+                        placeholder="e.g. BMU Office Canteen"
+                      />
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        Business / Payee name shown inside customer UPI apps (GPay, PhonePe, Paytm).
+                      </p>
+                    </div>
                   </div>
                 </div>
               )}
@@ -3405,7 +3478,7 @@ export default function OperatorConsole() {
                 className="cursor-default hover:text-slate-500 transition-colors"
                 title="System Version"
               >
-                BMU Canteen OS • A Product of NULIFE • v1.0.0
+                {settings.canteen_name || 'BMU Canteen'} OS • {settings.canteen_tagline || 'A Product of NULIFE'} • v1.0.0
               </span>
               <span className="flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse"></span>

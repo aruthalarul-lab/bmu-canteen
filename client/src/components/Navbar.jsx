@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Utensils, Monitor, LayoutDashboard, ShoppingBag, Radio, QrCode, X, Copy, Check, Wallet } from 'lucide-react';
 import CustomerCreditModal from './CustomerCreditModal';
 
-export default function Navbar({ currentView, setView, cartCount, setIsCartOpen, isConnected }) {
+export default function Navbar({ currentView, setView, cartCount, setIsCartOpen, isConnected, settings }) {
   const [showQrModal, setShowQrModal] = useState(false);
   const [showCreditModal, setShowCreditModal] = useState(false);
   const [creditModalTab, setCreditModalTab] = useState('wallet');
@@ -24,15 +24,15 @@ export default function Navbar({ currentView, setView, cartCount, setIsCartOpen,
               className="flex items-center space-x-2 sm:space-x-3 cursor-pointer shrink-0 min-w-0" 
               onClick={() => setView('customer')}
             >
-              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-orange-600 to-amber-500 flex items-center justify-center shadow-md shadow-orange-500/20 text-white shrink-0">
-                <Utensils className="w-4 h-4 sm:w-5 sm:h-5" />
+              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-orange-600 to-amber-500 flex items-center justify-center shadow-md shadow-orange-500/20 text-white shrink-0 text-base sm:text-xl select-none">
+                {settings?.canteen_logo || '🍽️'}
               </div>
               <div className="flex flex-col min-w-0">
                 <span className="font-black text-sm sm:text-lg tracking-tight text-slate-900 leading-tight truncate">
-                  BMU Canteen
+                  {settings?.canteen_name || 'BMU Canteen'}
                 </span>
                 <span className="text-[10px] text-slate-500 font-medium truncate hidden min-[360px]:inline">
-                  A Product of NULIFE
+                  {settings?.canteen_tagline || 'A Product of NULIFE'}
                 </span>
               </div>
             </div>
@@ -197,6 +197,7 @@ export default function Navbar({ currentView, setView, cartCount, setIsCartOpen,
         isOpen={showCreditModal}
         initialTab={creditModalTab}
         onClose={() => setShowCreditModal(false)}
+        settings={settings}
       />
     </>
   );

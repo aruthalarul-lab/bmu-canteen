@@ -180,6 +180,8 @@ function initDb() {
   // Initialize default settings if missing
   const insertSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
   insertSetting.run('canteen_name', 'BMU Canteen');
+  insertSetting.run('canteen_tagline', 'A Product of NULIFE');
+  insertSetting.run('canteen_logo', '🍽️');
   insertSetting.run('upi_id', 'bmucanteen@upi');
   insertSetting.run('upi_name', 'BMU Office Canteen');
   insertSetting.run('is_open', '1');
@@ -339,6 +341,8 @@ function factoryResetDatabase() {
 
     // 5. Reset default canteen settings
     db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('canteen_name', 'BMU Canteen')").run();
+    db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('canteen_tagline', 'A Product of NULIFE')").run();
+    db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('canteen_logo', '🍽️')").run();
     db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('upi_id', 'bmucanteen@upi')").run();
     db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('upi_name', 'BMU Office Canteen')").run();
     db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('is_open', '1')").run();
