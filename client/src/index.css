@@ -57,6 +57,26 @@ html, body {
     scrollbar-width: thin;
     scrollbar-color: #f97316 #ffedd5;
   }
+
+  /* Clean slate horizontal scrollbar for navigation pills & settings tabs */
+  .custom-scrollbar-nav::-webkit-scrollbar {
+    height: 6px;
+  }
+  .custom-scrollbar-nav::-webkit-scrollbar-track {
+    background: #e2e8f0;
+    border-radius: 9999px;
+  }
+  .custom-scrollbar-nav::-webkit-scrollbar-thumb {
+    background: #94a3b8;
+    border-radius: 9999px;
+  }
+  .custom-scrollbar-nav::-webkit-scrollbar-thumb:hover {
+    background: #64748b;
+  }
+  .custom-scrollbar-nav {
+    scrollbar-width: thin;
+    scrollbar-color: #94a3b8 #e2e8f0;
+  }
 }
 
 /* Pulse glow animation for Ready orders */

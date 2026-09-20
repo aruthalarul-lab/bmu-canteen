@@ -3089,7 +3089,7 @@ export default function OperatorConsole() {
             </div>
 
             {/* Category Navigation Pills ("Small Menu Items") */}
-            <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 no-scrollbar">
+            <div className="flex items-center space-x-1.5 overflow-x-auto pb-2 custom-scrollbar-nav">
               {[
                 { id: 'ALL', label: 'All Settings', icon: Settings },
                 { id: 'profile', label: 'Canteen Profile', icon: Store },
@@ -3362,7 +3362,7 @@ export default function OperatorConsole() {
                   </p>
 
                   {/* 4 Template Category Tabs */}
-                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-2 custom-scrollbar-nav">
                     {[
                       { id: 'order_ready', label: 'Order Ready', icon: '🔔', desc: 'Sent when order is ready for pickup' },
                       { id: 'due_reminder', label: 'Due Reminder', icon: '🧾', desc: 'Sent for credit ledger balance & UPI payment link' },
