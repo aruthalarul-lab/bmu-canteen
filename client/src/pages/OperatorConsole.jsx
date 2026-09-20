@@ -3273,7 +3273,7 @@ export default function OperatorConsole() {
                           placeholder="e.g. Smart Food Court-Chat and eat"
                         />
                         <p className="text-[10px] text-slate-400 mt-0.5">
-                          Subheading displayed in top navigation bar and footer.
+                          Subheading displayed in top navigation bar under canteen name.
                         </p>
                       </div>
                     </div>
@@ -3755,7 +3755,7 @@ export default function OperatorConsole() {
                 className="cursor-default hover:text-slate-500 transition-colors"
                 title="System Version"
               >
-                {settings.canteen_name || 'BMU Canteen'} OS • {settings.canteen_tagline || 'Smart Food Court-Chat and eat'} • v1.0.0
+                {settings.canteen_name || 'BMU Canteen'} OS • A Product of NULIFE • v1.0.0
               </span>
               <span className="flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse"></span>

@@ -48,8 +48,8 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    document.title = `${settings?.canteen_name || 'BMU Canteen'} • ${settings?.canteen_tagline || 'Smart Food Court-Chat and eat'}`;
-  }, [settings?.canteen_name, settings?.canteen_tagline]);
+    document.title = `${settings?.canteen_name || 'BMU Canteen'} • A Product of NULIFE`;
+  }, [settings?.canteen_name]);
 
   // Cart State with localStorage persistence
   const [cart, setCart] = useState(() => {
