@@ -13,7 +13,10 @@ public class SoundBoxStorage {
     private static final String KEY_REPEAT = "repeat_twice";
     private static final String KEY_INCLUDE_PAYER = "include_payer";
     private static final String KEY_VOLUME_BOOST = "volume_boost";
+    private static final String KEY_HANDS_FREE_VOICE = "hands_free_voice";
+    private static final String KEY_WAVE_REPEAT = "wave_repeat";
     private static final String KEY_HISTORY = "payment_history";
+    private static final String KEY_LAST_PAYMENT = "last_payment_json";
 
     private final SharedPreferences prefs;
 
@@ -22,7 +25,7 @@ public class SoundBoxStorage {
     }
 
     public String getLanguage() {
-        return prefs.getString(KEY_LANGUAGE, "en"); // en, hi, hinglish, ta, te
+        return prefs.getString(KEY_LANGUAGE, "en_ta"); // Default to English + Tamil!
     }
 
     public void setLanguage(String lang) {
@@ -53,13 +56,66 @@ public class SoundBoxStorage {
         prefs.edit().putBoolean(KEY_VOLUME_BOOST, boost).apply();
     }
 
+    public boolean isHandsFreeVoiceEnabled() {
+        return prefs.getBoolean(KEY_HANDS_FREE_VOICE, true);
+    }
+
+    public void setHandsFreeVoiceEnabled(boolean enabled) {
+        prefs.edit().putBoolean(KEY_HANDS_FREE_VOICE, enabled).apply();
+    }
+
+    public boolean isWaveRepeatEnabled() {
+        return prefs.getBoolean(KEY_WAVE_REPEAT, true);
+    }
+
+    public void setWaveRepeatEnabled(boolean enabled) {
+        prefs.edit().putBoolean(KEY_WAVE_REPEAT, enabled).apply();
+    }
+
     public synchronized void addPayment(PaymentRecord record) {
+        // Save as last payment
+        saveLastPayment(record);
+
         List<PaymentRecord> list = getHistory();
         list.add(0, record);
         if (list.size() > 50) {
             list = list.subList(0, 50);
         }
         saveHistory(list);
+    }
+
+    private synchronized void saveLastPayment(PaymentRecord record) {
+        try {
+            JSONObject obj = new JSONObject();
+            obj.put("id", record.getId());
+            obj.put("amount", record.getAmount());
+            obj.put("payer", record.getPayerName());
+            obj.put("app", record.getAppName());
+            obj.put("time", record.getTimestamp());
+            prefs.edit().putString(KEY_LAST_PAYMENT, obj.toString()).apply();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    public synchronized PaymentRecord getLastPayment() {
+        String jsonStr = prefs.getString(KEY_LAST_PAYMENT, null);
+        if (jsonStr == null) {
+            List<PaymentRecord> list = getHistory();
+            return list.isEmpty() ? null : list.get(0);
+        }
+        try {
+            JSONObject obj = new JSONObject(jsonStr);
+            return new PaymentRecord(
+                obj.optString("id", ""),
+                obj.optString("amount", "0"),
+                obj.optString("payer", "Customer"),
+                obj.optString("app", "UPI"),
+                obj.optLong("time", System.currentTimeMillis())
+            );
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     public synchronized List<PaymentRecord> getHistory() {
@@ -102,6 +158,6 @@ public class SoundBoxStorage {
     }
 
     public void clearHistory() {
-        prefs.edit().remove(KEY_HISTORY).apply();
+        prefs.edit().remove(KEY_HISTORY).remove(KEY_LAST_PAYMENT).apply();
     }
 }

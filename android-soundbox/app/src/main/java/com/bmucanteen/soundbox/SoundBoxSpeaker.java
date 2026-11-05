@@ -7,7 +7,6 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.speech.tts.TextToSpeech;
-import android.speech.tts.UtteranceProgressListener;
 import android.util.Log;
 import java.util.Locale;
 
@@ -66,8 +65,10 @@ public class SoundBoxSpeaker {
             locale = new Locale("te", "IN");
         } else if ("hinglish".equalsIgnoreCase(langCode)) {
             locale = new Locale("hi", "IN");
+        } else if ("en_ta".equalsIgnoreCase(langCode)) {
+            locale = Locale.US;
         }
-        
+
         int result = tts.setLanguage(locale);
         if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
             tts.setLanguage(Locale.US);
@@ -96,11 +97,73 @@ public class SoundBoxSpeaker {
         }
 
         boostVolume();
-        String message = buildSpeechText(amount, payer, appName);
-        executeSpeech(message);
+        String lang = storage.getLanguage();
 
-        if (storage.isRepeatTwice()) {
-            new Handler(Looper.getMainLooper()).postDelayed(() -> executeSpeech(message), 2500);
+        if ("en_ta".equalsIgnoreCase(lang)) {
+            // Dual Announcement: English first, then Tamil!
+            speakDualEnglishTamil(amount, payer, appName, false);
+        } else {
+            String message = buildSingleLanguageText(amount, payer, appName, lang);
+            executeSpeech(message, getLocaleForLanguage(lang));
+
+            if (storage.isRepeatTwice()) {
+                new Handler(Looper.getMainLooper()).postDelayed(() -> executeSpeech(message, getLocaleForLanguage(lang)), 2500);
+            }
+        }
+    }
+
+    private void speakDualEnglishTamil(String amount, String payer, String appName, boolean isRepeatPrefix) {
+        boolean includePayer = storage.isIncludePayer() && payer != null && !payer.trim().isEmpty();
+        String cleanPayer = includePayer ? payer.trim() : "";
+        String cleanAmount = amount != null ? amount.replaceAll("[^0-9.]", "") : "0";
+
+        // 1. English Utterance
+        String prefix = isRepeatPrefix ? "Repeating: " : "";
+        String enText = prefix + "Received " + cleanAmount + " rupees on " + appName + (includePayer ? " from " + cleanPayer : "") + ".";
+        executeSpeech(enText, Locale.US);
+
+        // 2. Tamil Utterance after 1.8 seconds
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            String taText;
+            Locale tamilLocale = new Locale("ta", "IN");
+            int check = tts != null ? tts.isLanguageAvailable(tamilLocale) : TextToSpeech.LANG_NOT_SUPPORTED;
+
+            if (check >= TextToSpeech.LANG_AVAILABLE) {
+                // Native Tamil script
+                taText = appName + "-il " + (includePayer ? cleanPayer + "-idamirundhu " : "") + cleanAmount + " ரூபாய் பெறப்பட்டது.";
+                executeSpeech(taText, tamilLocale);
+            } else {
+                // Phonetic transliteration that English TTS reads with Tamil pronunciation
+                taText = appName + " il " + (includePayer ? cleanPayer + " idamirundhu " : "") + cleanAmount + " roobai vandhadhu.";
+                executeSpeech(taText, Locale.US);
+            }
+        }, 1800);
+
+        if (storage.isRepeatTwice() && !isRepeatPrefix) {
+            new Handler(Looper.getMainLooper()).postDelayed(() -> speakDualEnglishTamil(amount, payer, appName, false), 4800);
+        }
+    }
+
+    public void repeatLastPayment() {
+        PaymentRecord record = storage.getLastPayment();
+        if (record == null) {
+            String lang = storage.getLanguage();
+            if ("en_ta".equalsIgnoreCase(lang)) {
+                executeSpeech("No payments received yet today.", Locale.US);
+                new Handler(Looper.getMainLooper()).postDelayed(() -> executeSpeech("Indru endha panamum perappadavillai.", Locale.US), 1600);
+            } else {
+                executeSpeech("No payments received yet today.", getLocaleForLanguage(lang));
+            }
+            return;
+        }
+
+        boostVolume();
+        String lang = storage.getLanguage();
+        if ("en_ta".equalsIgnoreCase(lang)) {
+            speakDualEnglishTamil(record.getAmount(), record.getPayerName(), record.getAppName(), true);
+        } else {
+            String text = "Repeating last payment: " + buildSingleLanguageText(record.getAmount(), record.getPayerName(), record.getAppName(), lang);
+            executeSpeech(text, getLocaleForLanguage(lang));
         }
     }
 
@@ -108,11 +171,16 @@ public class SoundBoxSpeaker {
         speakPayment(amount, "Rahul Sharma", "Google Pay");
     }
 
-    private void executeSpeech(String message) {
+    private void executeSpeech(String message, Locale locale) {
         if (tts == null) return;
+        if (locale != null) {
+            try {
+                tts.setLanguage(locale);
+            } catch (Exception ignored) {}
+        }
         tts.setSpeechRate(0.95f);
         tts.setPitch(1.0f);
-        
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             tts.speak(message, TextToSpeech.QUEUE_ADD, null, "SoundBoxUtterance_" + System.currentTimeMillis());
         } else {
@@ -120,8 +188,14 @@ public class SoundBoxSpeaker {
         }
     }
 
-    private String buildSpeechText(String amount, String payer, String appName) {
-        String lang = storage.getLanguage();
+    private Locale getLocaleForLanguage(String lang) {
+        if ("hi".equalsIgnoreCase(lang) || "hinglish".equalsIgnoreCase(lang)) return new Locale("hi", "IN");
+        if ("ta".equalsIgnoreCase(lang)) return new Locale("ta", "IN");
+        if ("te".equalsIgnoreCase(lang)) return new Locale("te", "IN");
+        return Locale.US;
+    }
+
+    private String buildSingleLanguageText(String amount, String payer, String appName, String lang) {
         boolean includePayer = storage.isIncludePayer() && payer != null && !payer.trim().isEmpty();
         String cleanPayer = includePayer ? payer.trim() : "";
         String cleanAmount = amount != null ? amount.replaceAll("[^0-9.]", "") : "0";
@@ -139,7 +213,7 @@ public class SoundBoxSpeaker {
                 return appName + " par " + cleanAmount + " rupaye received.";
             }
         } else if ("ta".equalsIgnoreCase(lang)) {
-            return appName + " il " + cleanAmount + " roobai vandhadhu.";
+            return appName + " il " + (includePayer ? cleanPayer + " idamirundhu " : "") + cleanAmount + " roobai vandhadhu.";
         } else if ("te".equalsIgnoreCase(lang)) {
             return appName + " lo " + cleanAmount + " roopaayilu vachhaayi.";
         } else {

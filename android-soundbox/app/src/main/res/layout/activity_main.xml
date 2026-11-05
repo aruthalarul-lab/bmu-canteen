@@ -43,7 +43,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Instant Voice Payment Alerts • BMU Canteen"
+                        android:text="Voice Payment Alerts • English &amp; Tamil • BMU Canteen"
                         android:textSize="12sp"
                         android:textColor="@color/text_muted" />
                 </LinearLayout>
@@ -60,7 +60,7 @@
                 android:id="@+id/cardStatus"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
+                android:layout_marginBottom="14dp"
                 app:cardCornerRadius="16dp"
                 app:cardElevation="2dp"
                 app:strokeWidth="1.5dp"
@@ -102,18 +102,112 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Test Audio Button -->
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnTestVoice"
+            <!-- Action Buttons Row (Test Voice + Repeat Last Payment) -->
+            <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="54dp"
-                android:layout_marginBottom="16dp"
-                android:text="@string/test_sound"
-                android:textSize="15sp"
-                android:textStyle="bold"
-                android:textAllCaps="false"
-                app:cornerRadius="14dp"
-                android:backgroundTint="@color/primary" />
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="14dp">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnTestVoice"
+                    android:layout_width="0dp"
+                    android:layout_height="52dp"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="6dp"
+                    android:text="🔊 Test Alert"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:textAllCaps="false"
+                    app:cornerRadius="14dp"
+                    android:backgroundTint="@color/primary" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnRepeatLast"
+                    android:layout_width="0dp"
+                    android:layout_height="52dp"
+                    android:layout_weight="1"
+                    android:layout_marginStart="6dp"
+                    android:text="🔁 Repeat Last"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:textAllCaps="false"
+                    app:cornerRadius="14dp"
+                    app:strokeColor="@color/primary"
+                    app:strokeWidth="1.5dp"
+                    android:textColor="@color/primary"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
+            </LinearLayout>
+
+            <!-- Hands-Free Voice & Gesture Card -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="14dp"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="1dp"
+                app:strokeWidth="1dp"
+                app:strokeColor="#CBD5E1"
+                app:cardBackgroundColor="@color/card_bg">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🖐️ Hands-Free Repeat (Without Touching Phone)"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/text_main" />
+
+                    <!-- Voice Command Switch -->
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switchVoiceCommand"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="🎙️ Voice Command: 'Hey Raj, Repeat'"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Say 'Hey Raj, Repeat' or 'Repeat' anytime to hear the last payment out loud."
+                        android:textSize="11sp"
+                        android:textColor="@color/text_muted"
+                        android:layout_marginStart="4dp"
+                        android:layout_marginBottom="8dp" />
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:background="@color/divider"
+                        android:layout_marginBottom="8dp" />
+
+                    <!-- Proximity Wave Switch -->
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switchWaveRepeat"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="👋 Wave Hand Over Screen to Repeat"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Simply wave your hand across the top sensor to repeat without touching the screen."
+                        android:textSize="11sp"
+                        android:textColor="@color/text_muted"
+                        android:layout_marginStart="4dp" />
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
 
             <!-- Voice & Language Settings Card -->
             <com.google.android.material.card.MaterialCardView
@@ -157,10 +251,25 @@
                         android:layout_marginTop="4dp">
 
                         <RadioButton
+                            android:id="@+id/rbEnglishTamil"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🌟 English + Tamil (Dual Language 🇬🇧+🇮🇳)"
+                            android:textStyle="bold"
+                            android:textSize="13sp" />
+
+                        <RadioButton
+                            android:id="@+id/rbTamil"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Tamil Only (தமிழ் - 100 ரூபாய் பெறப்பட்டது)"
+                            android:textSize="13sp" />
+
+                        <RadioButton
                             android:id="@+id/rbEnglish"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="English (Received ₹100 on Google Pay)"
+                            android:text="English Only (Received ₹100 on Google Pay)"
                             android:textSize="13sp" />
 
                         <RadioButton
@@ -175,13 +284,6 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="Hinglish (Google Pay par 100 rupaye received)"
-                            android:textSize="13sp" />
-
-                        <RadioButton
-                            android:id="@+id/rbTamil"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Tamil (Google Pay il 100 roobai vandhadhu)"
                             android:textSize="13sp" />
 
                         <RadioButton
