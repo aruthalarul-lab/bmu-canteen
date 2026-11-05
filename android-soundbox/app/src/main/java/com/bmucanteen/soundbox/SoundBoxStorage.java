@@ -15,6 +15,7 @@ public class SoundBoxStorage {
     private static final String KEY_VOLUME_BOOST = "volume_boost";
     private static final String KEY_HANDS_FREE_VOICE = "hands_free_voice";
     private static final String KEY_WAVE_REPEAT = "wave_repeat";
+    private static final String KEY_FLOATING_LCD = "floating_lcd";
     private static final String KEY_HISTORY = "payment_history";
     private static final String KEY_LAST_PAYMENT = "last_payment_json";
 
@@ -70,6 +71,14 @@ public class SoundBoxStorage {
 
     public void setWaveRepeatEnabled(boolean enabled) {
         prefs.edit().putBoolean(KEY_WAVE_REPEAT, enabled).apply();
+    }
+
+    public boolean isFloatingLcdEnabled() {
+        return prefs.getBoolean(KEY_FLOATING_LCD, true);
+    }
+
+    public void setFloatingLcdEnabled(boolean enabled) {
+        prefs.edit().putBoolean(KEY_FLOATING_LCD, enabled).apply();
     }
 
     public synchronized void addPayment(PaymentRecord record) {

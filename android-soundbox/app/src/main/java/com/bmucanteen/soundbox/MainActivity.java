@@ -8,6 +8,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
@@ -26,18 +27,26 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.switchmaterial.SwitchMaterial;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
 
     private static final int REQ_RECORD_AUDIO = 201;
+    private static final int REQ_OVERLAY_PERMISSION = 202;
 
     private MaterialCardView cardStatus;
     private TextView tvStatusTitle, tvStatusDesc, tvEmptyHistory, btnClearHistory;
     private MaterialButton btnPermission, btnTestVoice, btnRepeatLast;
+    
+    // LCD Display Screen Views
+    private TextView tvMainLcdStatus, tvMainLcdAmount, tvMainLcdPayerApp, tvMainLcdTime, btnMainLcdPopOut;
+
     private RadioGroup rgLanguage;
     private RadioButton rbEnglishTamil, rbEnglish, rbTamil, rbHindi, rbHinglish, rbTelugu;
-    private SwitchMaterial switchVoiceCommand, switchWaveRepeat;
+    private SwitchMaterial switchVoiceCommand, switchWaveRepeat, switchFloatingLcd;
     private SwitchMaterial switchRepeat, switchIncludePayer, switchVolumeBoost;
     private RecyclerView rvPayments;
     private PaymentHistoryAdapter adapter;
@@ -46,10 +55,13 @@ public class MainActivity extends AppCompatActivity {
     private VoiceCommandManager voiceCommandManager;
     private ProximitySensorManager proximitySensorManager;
 
+    private final SimpleDateFormat timeFormat = new SimpleDateFormat("hh:mm a", Locale.getDefault());
+
     private final BroadcastReceiver paymentReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
             refreshHistory();
+            updateLcdDisplay(storage.getLastPayment());
         }
     };
 
@@ -72,20 +84,36 @@ public class MainActivity extends AppCompatActivity {
 
         btnPermission.setOnClickListener(v -> openNotificationAccessSettings());
         btnTestVoice.setOnClickListener(v -> {
-            Toast.makeText(this, "Testing voice announcement...", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Testing voice announcement & LCD...", Toast.LENGTH_SHORT).show();
             SoundBoxSpeaker.getInstance(this).speakTest("100");
+            PaymentRecord testRec = new PaymentRecord("test", "100", "Rahul Sharma", "Google Pay", System.currentTimeMillis());
+            updateLcdDisplay(testRec);
+            FloatingLcdService.showLcd(this, "100", "Rahul Sharma", "Google Pay");
         });
 
         btnRepeatLast.setOnClickListener(v -> {
             Toast.makeText(this, "Repeating last payment...", Toast.LENGTH_SHORT).show();
             SoundBoxSpeaker.getInstance(this).repeatLastPayment();
+            updateLcdDisplay(storage.getLastPayment());
+        });
+
+        btnMainLcdPopOut.setOnClickListener(v -> {
+            PaymentRecord last = storage.getLastPayment();
+            String amt = last != null ? last.getAmount() : "100";
+            String payer = last != null ? last.getPayerName() : "Rahul Sharma";
+            String app = last != null ? last.getAppName() : "Google Pay";
+            checkAndLaunchFloatingLcd(amt, payer, app);
         });
 
         btnClearHistory.setOnClickListener(v -> {
             storage.clearHistory();
             refreshHistory();
+            updateLcdDisplay(null);
             Toast.makeText(this, "History cleared", Toast.LENGTH_SHORT).show();
         });
+
+        // Initialize LCD Screen with last payment or ready state
+        updateLcdDisplay(storage.getLastPayment());
     }
 
     private void initViews() {
@@ -95,6 +123,13 @@ public class MainActivity extends AppCompatActivity {
         btnPermission = findViewById(R.id.btnPermission);
         btnTestVoice = findViewById(R.id.btnTestVoice);
         btnRepeatLast = findViewById(R.id.btnRepeatLast);
+
+        // LCD Display in MainActivity
+        tvMainLcdStatus = findViewById(R.id.tvMainLcdStatus);
+        tvMainLcdAmount = findViewById(R.id.tvMainLcdAmount);
+        tvMainLcdPayerApp = findViewById(R.id.tvMainLcdPayerApp);
+        tvMainLcdTime = findViewById(R.id.tvMainLcdTime);
+        btnMainLcdPopOut = findViewById(R.id.btnMainLcdPopOut);
 
         rgLanguage = findViewById(R.id.rgLanguage);
         rbEnglishTamil = findViewById(R.id.rbEnglishTamil);
@@ -106,6 +141,7 @@ public class MainActivity extends AppCompatActivity {
 
         switchVoiceCommand = findViewById(R.id.switchVoiceCommand);
         switchWaveRepeat = findViewById(R.id.switchWaveRepeat);
+        switchFloatingLcd = findViewById(R.id.switchFloatingLcd);
 
         switchRepeat = findViewById(R.id.switchRepeat);
         switchIncludePayer = findViewById(R.id.switchIncludePayer);
@@ -114,6 +150,36 @@ public class MainActivity extends AppCompatActivity {
         btnClearHistory = findViewById(R.id.btnClearHistory);
         tvEmptyHistory = findViewById(R.id.tvEmptyHistory);
         rvPayments = findViewById(R.id.rvPayments);
+    }
+
+    private void updateLcdDisplay(PaymentRecord record) {
+        if (tvMainLcdAmount == null) return;
+
+        if (record != null) {
+            tvMainLcdStatus.setText("● PAYMENT RECEIVED");
+            tvMainLcdStatus.setTextColor(Color.parseColor("#34D399"));
+            tvMainLcdAmount.setText("₹ " + record.getAmount());
+            tvMainLcdPayerApp.setText(record.getAppName() + " • " + (record.getPayerName().isEmpty() ? "Customer" : record.getPayerName()));
+            String timeStr = timeFormat.format(new Date(record.getTimestamp()));
+            tvMainLcdTime.setText("Last alert: " + timeStr);
+        } else {
+            tvMainLcdStatus.setText("READY • WAITING FOR PAYMENT");
+            tvMainLcdStatus.setTextColor(Color.parseColor("#059669"));
+            tvMainLcdAmount.setText("₹ 0.00");
+            tvMainLcdPayerApp.setText("BMU Canteen • Smart Food Court");
+            tvMainLcdTime.setText("Last alert: None yet");
+        }
+    }
+
+    private void checkAndLaunchFloatingLcd(String amount, String payer, String app) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+            Toast.makeText(this, "Please allow 'Display over other apps' to show LCD on Home screen", Toast.LENGTH_LONG).show();
+            Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()));
+            startActivityForResult(intent, REQ_OVERLAY_PERMISSION);
+        } else {
+            FloatingLcdService.showLcd(this, amount, payer, app);
+            Toast.makeText(this, "Floating LCD launched! Check your home screen", Toast.LENGTH_SHORT).show();
+        }
     }
 
     private void setupLanguageAndSwitches() {
@@ -155,6 +221,16 @@ public class MainActivity extends AppCompatActivity {
         switchWaveRepeat.setOnCheckedChangeListener((buttonView, isChecked) -> {
             storage.setWaveRepeatEnabled(isChecked);
             if (proximitySensorManager != null) proximitySensorManager.setEnabled(isChecked);
+        });
+
+        // Floating LCD Window switch
+        switchFloatingLcd.setChecked(storage.isFloatingLcdEnabled());
+        switchFloatingLcd.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            storage.setFloatingLcdEnabled(isChecked);
+            if (isChecked && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+                Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()));
+                startActivityForResult(intent, REQ_OVERLAY_PERMISSION);
+            }
         });
 
         switchRepeat.setChecked(storage.isRepeatTwice());
@@ -266,6 +342,7 @@ public class MainActivity extends AppCompatActivity {
         super.onResume();
         updateStatusCard();
         refreshHistory();
+        updateLcdDisplay(storage.getLastPayment());
 
         if (storage.isHandsFreeVoiceEnabled() && ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
             if (voiceCommandManager != null) voiceCommandManager.setEnabled(true);

@@ -55,6 +55,136 @@
                     android:textSize="28sp" />
             </LinearLayout>
 
+            <!-- Digital Soundbox LCD Display Screen Window -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardLcdDisplay"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="14dp"
+                app:cardCornerRadius="18dp"
+                app:cardElevation="3dp"
+                app:strokeWidth="1.5dp"
+                app:strokeColor="#334155"
+                app:cardBackgroundColor="#0F172A">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <!-- LCD Top Title -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="● "
+                            android:textColor="#34D399"
+                            android:textSize="11sp" />
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="SOUNDBOX DIGITAL LCD DISPLAY"
+                            android:textColor="#A7F3D0"
+                            android:textSize="10sp"
+                            android:textStyle="bold"
+                            android:fontFamily="monospace"
+                            android:letterSpacing="0.08" />
+
+                        <TextView
+                            android:id="@+id/tvMainLcdLiveTag"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="LIVE LCD"
+                            android:textColor="#34D399"
+                            android:textSize="9sp"
+                            android:textStyle="bold"
+                            android:fontFamily="monospace" />
+                    </LinearLayout>
+
+                    <!-- LCD Screen Frame -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:background="@drawable/lcd_screen_bg"
+                        android:padding="14dp"
+                        android:layout_marginTop="10dp"
+                        android:gravity="center">
+
+                        <TextView
+                            android:id="@+id/tvMainLcdStatus"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="READY • WAITING FOR PAYMENT"
+                            android:textColor="#059669"
+                            android:textSize="10sp"
+                            android:textStyle="bold"
+                            android:fontFamily="monospace"
+                            android:letterSpacing="0.1" />
+
+                        <!-- Big Digital LCD Amount -->
+                        <TextView
+                            android:id="@+id/tvMainLcdAmount"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="₹ 0.00"
+                            android:textColor="#10B981"
+                            android:textSize="36sp"
+                            android:textStyle="bold"
+                            android:fontFamily="monospace"
+                            android:layout_marginTop="4dp"
+                            android:layout_marginBottom="4dp" />
+
+                        <!-- Payer & App Detail -->
+                        <TextView
+                            android:id="@+id/tvMainLcdPayerApp"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="BMU Canteen • Smart Food Court"
+                            android:textColor="#6EE7B7"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
+
+                    </LinearLayout>
+
+                    <!-- Bottom ticker inside bezel -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginTop="8dp">
+
+                        <TextView
+                            android:id="@+id/tvMainLcdTime"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Last payment: None yet"
+                            android:textColor="#64748B"
+                            android:textSize="10sp"
+                            android:fontFamily="monospace" />
+
+                        <TextView
+                            android:id="@+id/btnMainLcdPopOut"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="📺 Pop-up on Mobile Home Page"
+                            android:textColor="#F59E0B"
+                            android:textSize="10sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
             <!-- Status Card -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/cardStatus"
@@ -202,6 +332,30 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="Simply wave your hand across the top sensor to repeat without touching the screen."
+                        android:textSize="11sp"
+                        android:textColor="@color/text_muted"
+                        android:layout_marginStart="4dp" />
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:background="@color/divider"
+                        android:layout_marginTop="8dp"
+                        android:layout_marginBottom="8dp" />
+
+                    <!-- Floating LCD Switch -->
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switchFloatingLcd"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="📺 Floating LCD Pop-up on Mobile Home Page"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Shows a sleek floating digital LCD window on your phone home screen whenever money is received."
                         android:textSize="11sp"
                         android:textColor="@color/text_muted"
                         android:layout_marginStart="4dp" />

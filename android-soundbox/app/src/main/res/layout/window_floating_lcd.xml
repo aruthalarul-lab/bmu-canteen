@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout 
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/llLcdRoot"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:minWidth="220dp"
+    android:orientation="vertical"
+    android:background="@drawable/lcd_bezel_bg"
+    android:padding="12dp"
+    android:elevation="8dp">
+
+    <!-- Top Bar: Soundbox Logo & Close Button -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="● "
+            android:textColor="#34D399"
+            android:textSize="10sp" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="SOUNDBOX LCD"
+            android:textColor="#A7F3D0"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:fontFamily="monospace"
+            android:letterSpacing="0.08" />
+
+        <TextView
+            android:id="@+id/btnLcdClose"
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:gravity="center"
+            android:text="✕"
+            android:textColor="#94A3B8"
+            android:textSize="12sp"
+            android:background="?android:attr/selectableItemBackgroundBorderless" />
+    </LinearLayout>
+
+    <!-- LCD Digital Display Screen Screen -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@drawable/lcd_screen_bg"
+        android:padding="10dp"
+        android:layout_marginTop="6dp"
+        android:gravity="center">
+
+        <TextView
+            android:id="@+id/tvLcdStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="PAYMENT RECEIVED"
+            android:textColor="#059669"
+            android:textSize="9sp"
+            android:textStyle="bold"
+            android:fontFamily="monospace"
+            android:letterSpacing="0.1" />
+
+        <TextView
+            android:id="@+id/tvLcdAmount"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="₹ 150.00"
+            android:textColor="#10B981"
+            android:textSize="26sp"
+            android:textStyle="bold"
+            android:fontFamily="monospace"
+            android:layout_marginTop="2dp"
+            android:layout_marginBottom="2dp" />
+
+        <TextView
+            android:id="@+id/tvLcdPayerApp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Google Pay • Rahul Sharma"
+            android:textColor="#6EE7B7"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Tap to drag • Auto-hides"
+        android:textColor="#475569"
+        android:textSize="9sp"
+        android:gravity="center"
+        android:layout_marginTop="4dp" />
+
+</LinearLayout>

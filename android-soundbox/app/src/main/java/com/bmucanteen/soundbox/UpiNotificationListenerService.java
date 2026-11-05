@@ -78,6 +78,9 @@ public class UpiNotificationListenerService extends NotificationListenerService 
         // 1. Speak aloud via TextToSpeech
         SoundBoxSpeaker.getInstance(this).speakPayment(amount, payerName, appName);
 
+        // 2. Show in Floating LCD Display on Mobile Home Page
+        FloatingLcdService.showLcd(this, amount, payerName, appName);
+
         // 2. Save in History Ledger
         SoundBoxStorage storage = new SoundBoxStorage(this);
         PaymentRecord record = new PaymentRecord(
