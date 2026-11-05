@@ -185,7 +185,7 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Status Card -->
+            <!-- Status & Master Switch Card -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/cardStatus"
                 android:layout_width="match_parent"
@@ -202,23 +202,43 @@
                     android:orientation="vertical"
                     android:padding="16dp">
 
-                    <TextView
-                        android:id="@+id/tvStatusTitle"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/status_inactive"
-                        android:textSize="16sp"
-                        android:textStyle="bold"
-                        android:textColor="@color/text_main" />
-
-                    <TextView
-                        android:id="@+id/tvStatusDesc"
+                    <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:text="@string/desc_inactive"
-                        android:textSize="12sp"
-                        android:textColor="@color/text_muted" />
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:id="@+id/tvStatusTitle"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/status_inactive"
+                                android:textSize="16sp"
+                                android:textStyle="bold"
+                                android:textColor="@color/text_main" />
+
+                            <TextView
+                                android:id="@+id/tvStatusDesc"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="3dp"
+                                android:text="@string/desc_inactive"
+                                android:textSize="12sp"
+                                android:textColor="@color/text_muted" />
+                        </LinearLayout>
+
+                        <com.google.android.material.switchmaterial.SwitchMaterial
+                            android:id="@+id/switchMasterSoundbox"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp" />
+                    </LinearLayout>
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btnPermission"
@@ -475,6 +495,78 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="@string/volume_boost"
+                        android:textSize="13sp" />
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Payment Apps Selection Card -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="1dp"
+                app:strokeWidth="1dp"
+                app:strokeColor="@color/divider"
+                app:cardBackgroundColor="@color/card_bg">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="📱 Enabled Payment Apps"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/text_main" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Choose which payment apps to listen and announce:"
+                        android:textSize="11sp"
+                        android:textColor="@color/text_muted"
+                        android:layout_marginTop="2dp"
+                        android:layout_marginBottom="8dp" />
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switchAppGpay"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Google Pay (GPay)"
+                        android:textSize="13sp" />
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switchAppPhonepe"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="PhonePe"
+                        android:textSize="13sp" />
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switchAppPaytm"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Paytm"
+                        android:textSize="13sp" />
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switchAppBhim"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="BHIM UPI"
+                        android:textSize="13sp" />
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switchAppBankSms"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Bank SMS Credit Alerts"
                         android:textSize="13sp" />
 
                 </LinearLayout>

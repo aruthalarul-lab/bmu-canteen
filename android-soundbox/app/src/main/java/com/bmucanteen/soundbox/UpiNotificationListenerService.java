@@ -48,6 +48,13 @@ public class UpiNotificationListenerService extends NotificationListenerService 
         String fullMessage = (title + " " + text + " " + bigText).trim();
         if (fullMessage.isEmpty()) return;
 
+        SoundBoxStorage storage = new SoundBoxStorage(this);
+        // Master Check: Is SoundBox enabled?
+        if (!storage.isSoundBoxEnabled()) {
+            Log.d(TAG, "SoundBox is disabled/paused by user. Ignoring notification.");
+            return;
+        }
+
         // Process only if it looks like a payment or from a known payment app
         boolean isKnownApp = isPaymentApp(packageName);
         boolean isSmsApp = isMessagingApp(packageName);
@@ -55,6 +62,14 @@ public class UpiNotificationListenerService extends NotificationListenerService 
         if (!isKnownApp && !isSmsApp) {
             return;
         }
+
+        // Check if individual app is enabled
+        String appName = resolveAppName(packageName, fullMessage);
+        if ("Google Pay".equals(appName) && !storage.isGpayEnabled()) return;
+        if ("PhonePe".equals(appName) && !storage.isPhonePeEnabled()) return;
+        if ("Paytm".equals(appName) && !storage.isPaytmEnabled()) return;
+        if ("BHIM".equals(appName) && !storage.isBhimEnabled()) return;
+        if ("Bank Account".equals(appName) && !storage.isBankSmsEnabled()) return;
 
         // Check if message is a received/credit notification
         if (!isCreditMessage(fullMessage)) {
@@ -69,8 +84,7 @@ public class UpiNotificationListenerService extends NotificationListenerService 
             return;
         }
 
-        // Extract app name and payer name
-        String appName = resolveAppName(packageName, fullMessage);
+        // Extract payer name
         String payerName = extractPayerName(title, fullMessage);
 
         Log.i(TAG, "Valid UPI payment detected! Amount: ₹" + amount + ", Payer: " + payerName + ", App: " + appName);
@@ -81,8 +95,7 @@ public class UpiNotificationListenerService extends NotificationListenerService 
         // 2. Show in Floating LCD Display on Mobile Home Page
         FloatingLcdService.showLcd(this, amount, payerName, appName);
 
-        // 2. Save in History Ledger
-        SoundBoxStorage storage = new SoundBoxStorage(this);
+        // 3. Save in History Ledger
         PaymentRecord record = new PaymentRecord(
             String.valueOf(System.currentTimeMillis()),
             amount,

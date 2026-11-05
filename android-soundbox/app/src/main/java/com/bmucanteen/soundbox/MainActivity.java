@@ -40,6 +40,7 @@ public class MainActivity extends AppCompatActivity {
     private MaterialCardView cardStatus;
     private TextView tvStatusTitle, tvStatusDesc, tvEmptyHistory, btnClearHistory;
     private MaterialButton btnPermission, btnTestVoice, btnRepeatLast;
+    private SwitchMaterial switchMasterSoundbox;
     
     // LCD Display Screen Views
     private TextView tvMainLcdStatus, tvMainLcdAmount, tvMainLcdPayerApp, tvMainLcdTime, btnMainLcdPopOut;
@@ -48,6 +49,10 @@ public class MainActivity extends AppCompatActivity {
     private RadioButton rbEnglishTamil, rbEnglish, rbTamil, rbHindi, rbHinglish, rbTelugu;
     private SwitchMaterial switchVoiceCommand, switchWaveRepeat, switchFloatingLcd;
     private SwitchMaterial switchRepeat, switchIncludePayer, switchVolumeBoost;
+
+    // App-specific switches
+    private SwitchMaterial switchAppGpay, switchAppPhonepe, switchAppPaytm, switchAppBhim, switchAppBankSms;
+
     private RecyclerView rvPayments;
     private PaymentHistoryAdapter adapter;
     private SoundBoxStorage storage;
@@ -123,6 +128,7 @@ public class MainActivity extends AppCompatActivity {
         btnPermission = findViewById(R.id.btnPermission);
         btnTestVoice = findViewById(R.id.btnTestVoice);
         btnRepeatLast = findViewById(R.id.btnRepeatLast);
+        switchMasterSoundbox = findViewById(R.id.switchMasterSoundbox);
 
         // LCD Display in MainActivity
         tvMainLcdStatus = findViewById(R.id.tvMainLcdStatus);
@@ -147,6 +153,13 @@ public class MainActivity extends AppCompatActivity {
         switchIncludePayer = findViewById(R.id.switchIncludePayer);
         switchVolumeBoost = findViewById(R.id.switchVolumeBoost);
 
+        // App-specific switches
+        switchAppGpay = findViewById(R.id.switchAppGpay);
+        switchAppPhonepe = findViewById(R.id.switchAppPhonepe);
+        switchAppPaytm = findViewById(R.id.switchAppPaytm);
+        switchAppBhim = findViewById(R.id.switchAppBhim);
+        switchAppBankSms = findViewById(R.id.switchAppBankSms);
+
         btnClearHistory = findViewById(R.id.btnClearHistory);
         tvEmptyHistory = findViewById(R.id.tvEmptyHistory);
         rvPayments = findViewById(R.id.rvPayments);
@@ -154,6 +167,14 @@ public class MainActivity extends AppCompatActivity {
 
     private void updateLcdDisplay(PaymentRecord record) {
         if (tvMainLcdAmount == null) return;
+
+        if (!storage.isSoundBoxEnabled()) {
+            tvMainLcdStatus.setText("PAUSED • SERVICE OFF");
+            tvMainLcdStatus.setTextColor(Color.parseColor("#94A3B8"));
+            tvMainLcdAmount.setText("PAUSED");
+            tvMainLcdPayerApp.setText("SoundBox is paused by user");
+            return;
+        }
 
         if (record != null) {
             tvMainLcdStatus.setText("● PAYMENT RECEIVED");
@@ -183,6 +204,28 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupLanguageAndSwitches() {
+        // Master SoundBox Enable / Disable Switch
+        switchMasterSoundbox.setChecked(storage.isSoundBoxEnabled());
+        switchMasterSoundbox.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            storage.setSoundBoxEnabled(isChecked);
+            updateStatusCard();
+            updateLcdDisplay(storage.getLastPayment());
+
+            if (isChecked) {
+                Toast.makeText(this, "SoundBox Enabled 🟢", Toast.LENGTH_SHORT).show();
+                if (storage.isHandsFreeVoiceEnabled() && ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                    if (voiceCommandManager != null) voiceCommandManager.setEnabled(true);
+                }
+                if (storage.isWaveRepeatEnabled() && proximitySensorManager != null) {
+                    proximitySensorManager.setEnabled(true);
+                }
+            } else {
+                Toast.makeText(this, "SoundBox Paused ⏸️", Toast.LENGTH_SHORT).show();
+                if (voiceCommandManager != null) voiceCommandManager.stopListening();
+                if (proximitySensorManager != null) proximitySensorManager.stop();
+            }
+        });
+
         String lang = storage.getLanguage();
         if ("en_ta".equalsIgnoreCase(lang)) rbEnglishTamil.setChecked(true);
         else if ("ta".equalsIgnoreCase(lang)) rbTamil.setChecked(true);
@@ -241,13 +284,29 @@ public class MainActivity extends AppCompatActivity {
 
         switchVolumeBoost.setChecked(storage.isVolumeBoost());
         switchVolumeBoost.setOnCheckedChangeListener((buttonView, isChecked) -> storage.setVolumeBoost(isChecked));
+
+        // Individual App switches
+        switchAppGpay.setChecked(storage.isGpayEnabled());
+        switchAppGpay.setOnCheckedChangeListener((b, isChecked) -> storage.setGpayEnabled(isChecked));
+
+        switchAppPhonepe.setChecked(storage.isPhonePeEnabled());
+        switchAppPhonepe.setOnCheckedChangeListener((b, isChecked) -> storage.setPhonePeEnabled(isChecked));
+
+        switchAppPaytm.setChecked(storage.isPaytmEnabled());
+        switchAppPaytm.setOnCheckedChangeListener((b, isChecked) -> storage.setPaytmEnabled(isChecked));
+
+        switchAppBhim.setChecked(storage.isBhimEnabled());
+        switchAppBhim.setOnCheckedChangeListener((b, isChecked) -> storage.setBhimEnabled(isChecked));
+
+        switchAppBankSms.setChecked(storage.isBankSmsEnabled());
+        switchAppBankSms.setOnCheckedChangeListener((b, isChecked) -> storage.setBankSmsEnabled(isChecked));
     }
 
     private void checkAndRequestAudioPermission() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.RECORD_AUDIO}, REQ_RECORD_AUDIO);
         } else {
-            if (voiceCommandManager != null) voiceCommandManager.setEnabled(true);
+            if (voiceCommandManager != null && storage.isSoundBoxEnabled()) voiceCommandManager.setEnabled(true);
         }
     }
 
@@ -257,7 +316,7 @@ public class MainActivity extends AppCompatActivity {
         if (requestCode == REQ_RECORD_AUDIO) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 Toast.makeText(this, "Voice command listening active! Say 'Hey Raj, Repeat'", Toast.LENGTH_LONG).show();
-                if (voiceCommandManager != null) voiceCommandManager.setEnabled(true);
+                if (voiceCommandManager != null && storage.isSoundBoxEnabled()) voiceCommandManager.setEnabled(true);
             } else {
                 switchVoiceCommand.setChecked(false);
                 storage.setHandsFreeVoiceEnabled(false);
@@ -301,8 +360,24 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void updateStatusCard() {
-        boolean enabled = isNotificationServiceEnabled();
-        if (enabled) {
+        boolean notifGranted = isNotificationServiceEnabled();
+        boolean soundboxEnabled = storage.isSoundBoxEnabled();
+
+        if (!soundboxEnabled) {
+            // Disabled / Paused State
+            cardStatus.setCardBackgroundColor(Color.parseColor("#F1F5F9"));
+            cardStatus.setStrokeColor(Color.parseColor("#94A3B8"));
+            tvStatusTitle.setText("SoundBox Paused ⏸️");
+            tvStatusTitle.setTextColor(Color.parseColor("#475569"));
+            tvStatusDesc.setText("Service is turned OFF. Incoming payments will not be announced.");
+            btnPermission.setVisibility(View.GONE);
+            return;
+        }
+
+        btnPermission.setVisibility(View.VISIBLE);
+
+        if (notifGranted) {
+            // Active & Listening State
             cardStatus.setCardBackgroundColor(Color.parseColor("#ECFDF5"));
             cardStatus.setStrokeColor(Color.parseColor("#10B981"));
             tvStatusTitle.setText(R.string.status_active);
@@ -312,6 +387,7 @@ public class MainActivity extends AppCompatActivity {
             btnPermission.setEnabled(false);
             btnPermission.setBackgroundColor(Color.parseColor("#10B981"));
         } else {
+            // Permission Needed State
             cardStatus.setCardBackgroundColor(Color.parseColor("#FFFBEB"));
             cardStatus.setStrokeColor(Color.parseColor("#F59E0B"));
             tvStatusTitle.setText(R.string.status_inactive);
@@ -344,12 +420,13 @@ public class MainActivity extends AppCompatActivity {
         refreshHistory();
         updateLcdDisplay(storage.getLastPayment());
 
-        if (storage.isHandsFreeVoiceEnabled() && ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-            if (voiceCommandManager != null) voiceCommandManager.setEnabled(true);
-        }
-
-        if (storage.isWaveRepeatEnabled() && proximitySensorManager != null) {
-            proximitySensorManager.setEnabled(true);
+        if (storage.isSoundBoxEnabled()) {
+            if (storage.isHandsFreeVoiceEnabled() && ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                if (voiceCommandManager != null) voiceCommandManager.setEnabled(true);
+            }
+            if (storage.isWaveRepeatEnabled() && proximitySensorManager != null) {
+                proximitySensorManager.setEnabled(true);
+            }
         }
 
         IntentFilter filter = new IntentFilter(UpiNotificationListenerService.ACTION_PAYMENT_RECEIVED);

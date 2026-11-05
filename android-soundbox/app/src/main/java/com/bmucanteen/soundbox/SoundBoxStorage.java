@@ -9,6 +9,17 @@ import java.util.List;
 
 public class SoundBoxStorage {
     private static final String PREF_NAME = "upi_soundbox_prefs";
+    
+    // Master App Enable/Disable
+    private static final String KEY_SOUNDBOX_ENABLED = "soundbox_master_enabled";
+
+    // Individual App Toggles
+    private static final String KEY_ENABLE_GPAY = "enable_gpay";
+    private static final String KEY_ENABLE_PHONEPE = "enable_phonepe";
+    private static final String KEY_ENABLE_PAYTM = "enable_paytm";
+    private static final String KEY_ENABLE_BHIM = "enable_bhim";
+    private static final String KEY_ENABLE_BANK_SMS = "enable_bank_sms";
+
     private static final String KEY_LANGUAGE = "language";
     private static final String KEY_REPEAT = "repeat_twice";
     private static final String KEY_INCLUDE_PAYER = "include_payer";
@@ -23,6 +34,56 @@ public class SoundBoxStorage {
 
     public SoundBoxStorage(Context context) {
         prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+    }
+
+    // Master Switch: Enable / Disable SoundBox
+    public boolean isSoundBoxEnabled() {
+        return prefs.getBoolean(KEY_SOUNDBOX_ENABLED, true);
+    }
+
+    public void setSoundBoxEnabled(boolean enabled) {
+        prefs.edit().putBoolean(KEY_SOUNDBOX_ENABLED, enabled).apply();
+    }
+
+    // Individual App Switches
+    public boolean isGpayEnabled() {
+        return prefs.getBoolean(KEY_ENABLE_GPAY, true);
+    }
+
+    public void setGpayEnabled(boolean enabled) {
+        prefs.edit().putBoolean(KEY_ENABLE_GPAY, enabled).apply();
+    }
+
+    public boolean isPhonePeEnabled() {
+        return prefs.getBoolean(KEY_ENABLE_PHONEPE, true);
+    }
+
+    public void setPhonePeEnabled(boolean enabled) {
+        prefs.edit().putBoolean(KEY_ENABLE_PHONEPE, enabled).apply();
+    }
+
+    public boolean isPaytmEnabled() {
+        return prefs.getBoolean(KEY_ENABLE_PAYTM, true);
+    }
+
+    public void setPaytmEnabled(boolean enabled) {
+        prefs.edit().putBoolean(KEY_ENABLE_PAYTM, enabled).apply();
+    }
+
+    public boolean isBhimEnabled() {
+        return prefs.getBoolean(KEY_ENABLE_BHIM, true);
+    }
+
+    public void setBhimEnabled(boolean enabled) {
+        prefs.edit().putBoolean(KEY_ENABLE_BHIM, enabled).apply();
+    }
+
+    public boolean isBankSmsEnabled() {
+        return prefs.getBoolean(KEY_ENABLE_BANK_SMS, true);
+    }
+
+    public void setBankSmsEnabled(boolean enabled) {
+        prefs.edit().putBoolean(KEY_ENABLE_BANK_SMS, enabled).apply();
     }
 
     public String getLanguage() {
@@ -82,7 +143,6 @@ public class SoundBoxStorage {
     }
 
     public synchronized void addPayment(PaymentRecord record) {
-        // Save as last payment
         saveLastPayment(record);
 
         List<PaymentRecord> list = getHistory();
