@@ -1,0 +1,18 @@
+<resources>
+    <string name="app_name">UPI SoundBox</string>
+    <string name="service_name">UPI SoundBox Listener</string>
+    <string name="status_active">SoundBox Active &amp; Listening 🟢</string>
+    <string name="status_inactive">Permission Needed ⚠️</string>
+    <string name="desc_active">Ready to speak out loud when GPay, PhonePe, Paytm, or BHIM payments arrive.</string>
+    <string name="desc_inactive">Tap below to grant Notification Access so the app can hear incoming UPI payments.</string>
+    <string name="grant_permission">Grant Notification Access</string>
+    <string name="test_sound">🔊 Test Voice Alert (₹100)</string>
+    <string name="recent_payments">Recent Voice Announcements</string>
+    <string name="no_payments_yet">No payments received yet today.\nIncoming voice alerts will appear here.</string>
+    <string name="voice_language">Announcement Language</string>
+    <string name="voice_settings">Voice &amp; Audio Settings</string>
+    <string name="repeat_announcement">Repeat Alert Twice</string>
+    <string name="include_payer">Include Payer Name</string>
+    <string name="volume_boost">Loud Audio Boost</string>
+    <string name="battery_tip">Tip: Exclude this app from Battery Optimization in phone settings so it keeps running in the background 24/7.</string>
+</resources>

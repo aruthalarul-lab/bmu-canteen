@@ -3332,6 +3332,28 @@ export default function OperatorConsole() {
                       </p>
                     </div>
                   </div>
+
+                  {/* Android SoundBox App Integration Card */}
+                  <div className="mt-3 p-3 rounded-xl bg-orange-50/80 border border-orange-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-orange-950">
+                        <span className="text-sm">🔊</span>
+                        <span>Android UPI SoundBox App</span>
+                        <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-orange-200 text-orange-900 uppercase">Built-in</span>
+                      </div>
+                      <p className="text-[11px] text-orange-800 leading-snug">
+                        Turns any phone into a voice soundbox. Loudly announces received payments for Google Pay, PhonePe, Paytm &amp; BHIM!
+                      </p>
+                    </div>
+                    <a
+                      href="/upi-soundbox.apk"
+                      download="UPI-SoundBox.apk"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-700 active:scale-95 text-white font-bold text-xs shadow-xs transition-all shrink-0"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Download APK</span>
+                    </a>
+                  </div>
                 </div>
               )}
 
