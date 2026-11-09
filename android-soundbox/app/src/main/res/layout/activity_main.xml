@@ -590,6 +590,17 @@
                     android:textColor="@color/text_main" />
 
                 <TextView
+                    android:id="@+id/btnSyncSms"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="📥 Sync Yesterday's SMS"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:textColor="#2563EB"
+                    android:padding="6dp"
+                    android:layout_marginEnd="8dp" />
+
+                <TextView
                     android:id="@+id/btnClearHistory"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"

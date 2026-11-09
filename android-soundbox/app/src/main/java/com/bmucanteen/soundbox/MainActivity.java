@@ -39,7 +39,7 @@ public class MainActivity extends AppCompatActivity {
     private static final int REQ_SMS_PERMISSION = 203;
 
     private MaterialCardView cardStatus;
-    private TextView tvStatusTitle, tvStatusDesc, tvEmptyHistory, btnClearHistory;
+    private TextView tvStatusTitle, tvStatusDesc, tvEmptyHistory, btnClearHistory, btnSyncSms;
     private MaterialButton btnPermission, btnTestVoice, btnRepeatLast;
     private SwitchMaterial switchMasterSoundbox;
     
@@ -118,6 +118,8 @@ public class MainActivity extends AppCompatActivity {
             Toast.makeText(this, "History cleared", Toast.LENGTH_SHORT).show();
         });
 
+        btnSyncSms.setOnClickListener(v -> showSyncSmsDialog());
+
         // Initialize LCD Screen with last payment or ready state
         updateLcdDisplay(storage.getLastPayment());
 
@@ -167,6 +169,7 @@ public class MainActivity extends AppCompatActivity {
         switchAppBankSms = findViewById(R.id.switchAppBankSms);
 
         btnClearHistory = findViewById(R.id.btnClearHistory);
+        btnSyncSms = findViewById(R.id.btnSyncSms);
         tvEmptyHistory = findViewById(R.id.tvEmptyHistory);
         rvPayments = findViewById(R.id.rvPayments);
     }
@@ -348,6 +351,54 @@ public class MainActivity extends AppCompatActivity {
                 Toast.makeText(this, "SMS permission denied. Bank SMS alerts may not trigger.", Toast.LENGTH_LONG).show();
             }
             updateStatusCard();
+        }
+    }
+
+    private void showSyncSmsDialog() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_SMS) != PackageManager.PERMISSION_GRANTED) {
+            Toast.makeText(this, "SMS permission needed to read past SMS", Toast.LENGTH_SHORT).show();
+            requestSmsPermission();
+            return;
+        }
+
+        String[] options = new String[]{
+            "Yesterday's Bank SMS",
+            "Today's Bank SMS",
+            "Last 7 Days Bank SMS"
+        };
+
+        new androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("📥 Import Past Bank SMS")
+            .setItems(options, (dialog, which) -> {
+                SmsHistoryImporter.TimeRange range;
+                if (which == 0) range = SmsHistoryImporter.TimeRange.YESTERDAY;
+                else if (which == 1) range = SmsHistoryImporter.TimeRange.TODAY;
+                else range = SmsHistoryImporter.TimeRange.LAST_7_DAYS;
+
+                performSmsImport(range);
+            })
+            .setNegativeButton("Cancel", null)
+            .show();
+    }
+
+    private void performSmsImport(SmsHistoryImporter.TimeRange range) {
+        Toast.makeText(this, "Scanning SMS inbox...", Toast.LENGTH_SHORT).show();
+        SmsHistoryImporter.ImportResult result = SmsHistoryImporter.importSms(this, range);
+
+        refreshHistory();
+        PaymentRecord last = storage.getLastPayment();
+        if (last != null) {
+            updateLcdDisplay(last);
+        }
+
+        if (result.count > 0) {
+            new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("✅ Import Successful")
+                .setMessage("Found and created " + result.count + " transaction record(s) from " + result.timeRangeDescription + "!\n\nTotal Amount: ₹" + String.format(Locale.getDefault(), "%.2f", result.totalAmount))
+                .setPositiveButton("OK", null)
+                .show();
+        } else {
+            Toast.makeText(this, "No new credit SMS found for " + result.timeRangeDescription, Toast.LENGTH_LONG).show();
         }
     }
 
