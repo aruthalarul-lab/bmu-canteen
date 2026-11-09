@@ -39,21 +39,12 @@ public class MainActivity extends AppCompatActivity {
     private static final int REQ_SMS_PERMISSION = 203;
 
     private MaterialCardView cardStatus;
-    private TextView tvStatusTitle, tvStatusDesc, tvEmptyHistory, btnClearHistory, btnSyncSms, btnPreviewVoice;
+    private TextView tvStatusTitle, tvStatusDesc, tvEmptyHistory, btnClearHistory, btnSyncSms, btnOpenSettings;
     private MaterialButton btnPermission, btnRepeatLast;
     private SwitchMaterial switchMasterSoundbox;
     
     // LCD Display Screen Views
     private TextView tvMainLcdStatus, tvMainLcdAmount, tvMainLcdPayerApp, tvMainLcdTime, btnMainLcdPopOut;
-
-    private RadioGroup rgLanguage, rgFemaleVoice;
-    private RadioButton rbEnglishTamil, rbEnglish, rbTamil, rbHindi, rbHinglish, rbTelugu;
-    private RadioButton rbFemaleNatural, rbFemaleCrisp, rbFemaleSoft, rbVoiceDefault;
-    private SwitchMaterial switchVoiceCommand, switchWaveRepeat, switchFloatingLcd;
-    private SwitchMaterial switchRepeat, switchIncludePayer, switchVolumeBoost;
-
-    // App-specific switches
-    private SwitchMaterial switchAppGpay, switchAppPhonepe, switchAppPaytm, switchAppBhim, switchAppBankSms;
 
     private RecyclerView rvPayments;
     private PaymentHistoryAdapter adapter;
@@ -90,10 +81,7 @@ public class MainActivity extends AppCompatActivity {
         proximitySensorManager = new ProximitySensorManager(this);
 
         btnPermission.setOnClickListener(v -> openNotificationAccessSettings());
-        btnPreviewVoice.setOnClickListener(v -> {
-            Toast.makeText(this, "Playing Tamil female voice sample...", Toast.LENGTH_SHORT).show();
-            SoundBoxSpeaker.getInstance(this).previewTamilVoice();
-        });
+        btnOpenSettings.setOnClickListener(v -> showSettingsBottomSheet());
 
         btnRepeatLast.setOnClickListener(v -> {
             Toast.makeText(this, "Repeating last payment...", Toast.LENGTH_SHORT).show();
@@ -134,6 +122,7 @@ public class MainActivity extends AppCompatActivity {
         btnPermission = findViewById(R.id.btnPermission);
         btnRepeatLast = findViewById(R.id.btnRepeatLast);
         switchMasterSoundbox = findViewById(R.id.switchMasterSoundbox);
+        btnOpenSettings = findViewById(R.id.btnOpenSettings);
 
         // LCD Display in MainActivity
         tvMainLcdStatus = findViewById(R.id.tvMainLcdStatus);
@@ -141,37 +130,6 @@ public class MainActivity extends AppCompatActivity {
         tvMainLcdPayerApp = findViewById(R.id.tvMainLcdPayerApp);
         tvMainLcdTime = findViewById(R.id.tvMainLcdTime);
         btnMainLcdPopOut = findViewById(R.id.btnMainLcdPopOut);
-
-        rgLanguage = findViewById(R.id.rgLanguage);
-        rbEnglishTamil = findViewById(R.id.rbEnglishTamil);
-        rbEnglish = findViewById(R.id.rbEnglish);
-        rbTamil = findViewById(R.id.rbTamil);
-        rbHindi = findViewById(R.id.rbHindi);
-        rbHinglish = findViewById(R.id.rbHinglish);
-        rbTelugu = findViewById(R.id.rbTelugu);
-
-        // Tamil Female Voice Controls
-        btnPreviewVoice = findViewById(R.id.btnPreviewVoice);
-        rgFemaleVoice = findViewById(R.id.rgFemaleVoice);
-        rbFemaleNatural = findViewById(R.id.rbFemaleNatural);
-        rbFemaleCrisp = findViewById(R.id.rbFemaleCrisp);
-        rbFemaleSoft = findViewById(R.id.rbFemaleSoft);
-        rbVoiceDefault = findViewById(R.id.rbVoiceDefault);
-
-        switchVoiceCommand = findViewById(R.id.switchVoiceCommand);
-        switchWaveRepeat = findViewById(R.id.switchWaveRepeat);
-        switchFloatingLcd = findViewById(R.id.switchFloatingLcd);
-
-        switchRepeat = findViewById(R.id.switchRepeat);
-        switchIncludePayer = findViewById(R.id.switchIncludePayer);
-        switchVolumeBoost = findViewById(R.id.switchVolumeBoost);
-
-        // App-specific switches
-        switchAppGpay = findViewById(R.id.switchAppGpay);
-        switchAppPhonepe = findViewById(R.id.switchAppPhonepe);
-        switchAppPaytm = findViewById(R.id.switchAppPaytm);
-        switchAppBhim = findViewById(R.id.switchAppBhim);
-        switchAppBankSms = findViewById(R.id.switchAppBankSms);
 
         btnClearHistory = findViewById(R.id.btnClearHistory);
         btnSyncSms = findViewById(R.id.btnSyncSms);
@@ -239,50 +197,99 @@ public class MainActivity extends AppCompatActivity {
                 if (proximitySensorManager != null) proximitySensorManager.stop();
             }
         });
+    }
 
-        String lang = storage.getLanguage();
-        if ("en_ta".equalsIgnoreCase(lang)) rbEnglishTamil.setChecked(true);
-        else if ("ta".equalsIgnoreCase(lang)) rbTamil.setChecked(true);
-        else if ("en".equalsIgnoreCase(lang)) rbEnglish.setChecked(true);
-        else if ("hi".equalsIgnoreCase(lang)) rbHindi.setChecked(true);
-        else if ("hinglish".equalsIgnoreCase(lang)) rbHinglish.setChecked(true);
-        else if ("te".equalsIgnoreCase(lang)) rbTelugu.setChecked(true);
-        else rbEnglishTamil.setChecked(true);
+    private void showSettingsBottomSheet() {
+        com.google.android.material.bottomsheet.BottomSheetDialog sheetDialog = 
+            new com.google.android.material.bottomsheet.BottomSheetDialog(this);
+        View sheetView = getLayoutInflater().inflate(R.layout.bottom_sheet_settings, null);
+        sheetDialog.setContentView(sheetView);
 
-        rgLanguage.setOnCheckedChangeListener((group, checkedId) -> {
-            String selected = "en_ta";
-            if (checkedId == R.id.rbEnglishTamil) selected = "en_ta";
-            else if (checkedId == R.id.rbTamil) selected = "ta";
-            else if (checkedId == R.id.rbEnglish) selected = "en";
-            else if (checkedId == R.id.rbHindi) selected = "hi";
-            else if (checkedId == R.id.rbHinglish) selected = "hinglish";
-            else if (checkedId == R.id.rbTelugu) selected = "te";
+        TextView btnCloseSettings = sheetView.findViewById(R.id.btnCloseSettings);
+        btnCloseSettings.setOnClickListener(v -> sheetDialog.dismiss());
 
-            storage.setLanguage(selected);
-            SoundBoxSpeaker.getInstance(this).setLanguage(selected);
+        // 1. Tamil Female Voice Controls
+        com.google.android.material.button.MaterialButton btnSheetPreviewVoice = sheetView.findViewById(R.id.btnSheetPreviewVoice);
+        btnSheetPreviewVoice.setOnClickListener(v -> {
+            Toast.makeText(this, "Playing Tamil female voice sample...", Toast.LENGTH_SHORT).show();
+            SoundBoxSpeaker.getInstance(this).previewTamilVoice();
         });
 
-        // Tamil Female Voice Setup
-        String voiceProfile = storage.getVoiceProfile();
-        if ("female_crisp".equals(voiceProfile)) rbFemaleCrisp.setChecked(true);
-        else if ("female_soft".equals(voiceProfile)) rbFemaleSoft.setChecked(true);
-        else if ("default".equals(voiceProfile)) rbVoiceDefault.setChecked(true);
-        else rbFemaleNatural.setChecked(true);
+        RadioGroup rgSheetFemaleVoice = sheetView.findViewById(R.id.rgSheetFemaleVoice);
+        RadioButton rbSheetFemaleNatural = sheetView.findViewById(R.id.rbSheetFemaleNatural);
+        RadioButton rbSheetFemaleCrisp = sheetView.findViewById(R.id.rbSheetFemaleCrisp);
+        RadioButton rbSheetFemaleSoft = sheetView.findViewById(R.id.rbSheetFemaleSoft);
+        RadioButton rbSheetVoiceDefault = sheetView.findViewById(R.id.rbSheetVoiceDefault);
 
-        rgFemaleVoice.setOnCheckedChangeListener((group, checkedId) -> {
+        String voiceProfile = storage.getVoiceProfile();
+        if ("female_crisp".equals(voiceProfile)) rbSheetFemaleCrisp.setChecked(true);
+        else if ("female_soft".equals(voiceProfile)) rbSheetFemaleSoft.setChecked(true);
+        else if ("default".equals(voiceProfile)) rbSheetVoiceDefault.setChecked(true);
+        else rbSheetFemaleNatural.setChecked(true);
+
+        rgSheetFemaleVoice.setOnCheckedChangeListener((group, checkedId) -> {
             String selected = "female_natural";
-            if (checkedId == R.id.rbFemaleCrisp) selected = "female_crisp";
-            else if (checkedId == R.id.rbFemaleSoft) selected = "female_soft";
-            else if (checkedId == R.id.rbVoiceDefault) selected = "default";
+            if (checkedId == R.id.rbSheetFemaleCrisp) selected = "female_crisp";
+            else if (checkedId == R.id.rbSheetFemaleSoft) selected = "female_soft";
+            else if (checkedId == R.id.rbSheetVoiceDefault) selected = "default";
 
             storage.setVoiceProfile(selected);
             Toast.makeText(this, "Voice updated! Playing preview...", Toast.LENGTH_SHORT).show();
             SoundBoxSpeaker.getInstance(this).previewTamilVoice();
         });
 
-        // Hands-Free Voice Listener switch
-        switchVoiceCommand.setChecked(storage.isHandsFreeVoiceEnabled());
-        switchVoiceCommand.setOnCheckedChangeListener((buttonView, isChecked) -> {
+        // 2. Language Controls
+        RadioGroup rgSheetLanguage = sheetView.findViewById(R.id.rgSheetLanguage);
+        RadioButton rbSheetEnglishTamil = sheetView.findViewById(R.id.rbSheetEnglishTamil);
+        RadioButton rbSheetTamil = sheetView.findViewById(R.id.rbSheetTamil);
+        RadioButton rbSheetEnglish = sheetView.findViewById(R.id.rbSheetEnglish);
+        RadioButton rbSheetHindi = sheetView.findViewById(R.id.rbSheetHindi);
+        RadioButton rbSheetHinglish = sheetView.findViewById(R.id.rbSheetHinglish);
+        RadioButton rbSheetTelugu = sheetView.findViewById(R.id.rbSheetTelugu);
+
+        String lang = storage.getLanguage();
+        if ("en_ta".equalsIgnoreCase(lang)) rbSheetEnglishTamil.setChecked(true);
+        else if ("ta".equalsIgnoreCase(lang)) rbSheetTamil.setChecked(true);
+        else if ("en".equalsIgnoreCase(lang)) rbSheetEnglish.setChecked(true);
+        else if ("hi".equalsIgnoreCase(lang)) rbSheetHindi.setChecked(true);
+        else if ("hinglish".equalsIgnoreCase(lang)) rbSheetHinglish.setChecked(true);
+        else if ("te".equalsIgnoreCase(lang)) rbSheetTelugu.setChecked(true);
+        else rbSheetEnglishTamil.setChecked(true);
+
+        rgSheetLanguage.setOnCheckedChangeListener((group, checkedId) -> {
+            String selected = "en_ta";
+            if (checkedId == R.id.rbSheetEnglishTamil) selected = "en_ta";
+            else if (checkedId == R.id.rbSheetTamil) selected = "ta";
+            else if (checkedId == R.id.rbSheetEnglish) selected = "en";
+            else if (checkedId == R.id.rbSheetHindi) selected = "hi";
+            else if (checkedId == R.id.rbSheetHinglish) selected = "hinglish";
+            else if (checkedId == R.id.rbSheetTelugu) selected = "te";
+
+            storage.setLanguage(selected);
+            SoundBoxSpeaker.getInstance(this).setLanguage(selected);
+        });
+
+        // 3. Audio Options
+        SwitchMaterial switchSheetRepeat = sheetView.findViewById(R.id.switchSheetRepeat);
+        SwitchMaterial switchSheetIncludePayer = sheetView.findViewById(R.id.switchSheetIncludePayer);
+        SwitchMaterial switchSheetVolumeBoost = sheetView.findViewById(R.id.switchSheetVolumeBoost);
+
+        switchSheetRepeat.setChecked(storage.isRepeatTwice());
+        switchSheetRepeat.setOnCheckedChangeListener((b, isChecked) -> storage.setRepeatTwice(isChecked));
+
+        switchSheetIncludePayer.setChecked(storage.isIncludePayer());
+        switchSheetIncludePayer.setOnCheckedChangeListener((b, isChecked) -> storage.setIncludePayer(isChecked));
+
+        switchSheetVolumeBoost.setChecked(storage.isVolumeBoost());
+        switchSheetVolumeBoost.setOnCheckedChangeListener((b, isChecked) -> storage.setVolumeBoost(isChecked));
+
+        // 4. Hands-Free Controls
+        SwitchMaterial switchSheetVoiceCommand = sheetView.findViewById(R.id.switchSheetVoiceCommand);
+        SwitchMaterial switchSheetWaveRepeat = sheetView.findViewById(R.id.switchSheetWaveRepeat);
+        SwitchMaterial switchSheetFloatingLcd = sheetView.findViewById(R.id.switchSheetFloatingLcd);
+
+        switchSheetVoiceCommand.setChecked(storage.isHandsFreeVoiceEnabled());
+        switchSheetVoiceCommand.setOnCheckedChangeListener((b, isChecked) -> {
             storage.setHandsFreeVoiceEnabled(isChecked);
             if (isChecked) {
                 checkAndRequestAudioPermission();
@@ -291,16 +298,14 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        // Proximity Wave Sensor switch
-        switchWaveRepeat.setChecked(storage.isWaveRepeatEnabled());
-        switchWaveRepeat.setOnCheckedChangeListener((buttonView, isChecked) -> {
+        switchSheetWaveRepeat.setChecked(storage.isWaveRepeatEnabled());
+        switchSheetWaveRepeat.setOnCheckedChangeListener((b, isChecked) -> {
             storage.setWaveRepeatEnabled(isChecked);
             if (proximitySensorManager != null) proximitySensorManager.setEnabled(isChecked);
         });
 
-        // Floating LCD Window switch
-        switchFloatingLcd.setChecked(storage.isFloatingLcdEnabled());
-        switchFloatingLcd.setOnCheckedChangeListener((buttonView, isChecked) -> {
+        switchSheetFloatingLcd.setChecked(storage.isFloatingLcdEnabled());
+        switchSheetFloatingLcd.setOnCheckedChangeListener((b, isChecked) -> {
             storage.setFloatingLcdEnabled(isChecked);
             if (isChecked && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
                 Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()));
@@ -308,36 +313,35 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        switchRepeat.setChecked(storage.isRepeatTwice());
-        switchRepeat.setOnCheckedChangeListener((buttonView, isChecked) -> storage.setRepeatTwice(isChecked));
+        // 5. Monitored Apps
+        SwitchMaterial switchSheetAppGpay = sheetView.findViewById(R.id.switchSheetAppGpay);
+        SwitchMaterial switchSheetAppPhonepe = sheetView.findViewById(R.id.switchSheetAppPhonepe);
+        SwitchMaterial switchSheetAppPaytm = sheetView.findViewById(R.id.switchSheetAppPaytm);
+        SwitchMaterial switchSheetAppBhim = sheetView.findViewById(R.id.switchSheetAppBhim);
+        SwitchMaterial switchSheetAppBankSms = sheetView.findViewById(R.id.switchSheetAppBankSms);
 
-        switchIncludePayer.setChecked(storage.isIncludePayer());
-        switchIncludePayer.setOnCheckedChangeListener((buttonView, isChecked) -> storage.setIncludePayer(isChecked));
+        switchSheetAppGpay.setChecked(storage.isGpayEnabled());
+        switchSheetAppGpay.setOnCheckedChangeListener((b, isChecked) -> storage.setGpayEnabled(isChecked));
 
-        switchVolumeBoost.setChecked(storage.isVolumeBoost());
-        switchVolumeBoost.setOnCheckedChangeListener((buttonView, isChecked) -> storage.setVolumeBoost(isChecked));
+        switchSheetAppPhonepe.setChecked(storage.isPhonePeEnabled());
+        switchSheetAppPhonepe.setOnCheckedChangeListener((b, isChecked) -> storage.setPhonePeEnabled(isChecked));
 
-        // Individual App switches
-        switchAppGpay.setChecked(storage.isGpayEnabled());
-        switchAppGpay.setOnCheckedChangeListener((b, isChecked) -> storage.setGpayEnabled(isChecked));
+        switchSheetAppPaytm.setChecked(storage.isPaytmEnabled());
+        switchSheetAppPaytm.setOnCheckedChangeListener((b, isChecked) -> storage.setPaytmEnabled(isChecked));
 
-        switchAppPhonepe.setChecked(storage.isPhonePeEnabled());
-        switchAppPhonepe.setOnCheckedChangeListener((b, isChecked) -> storage.setPhonePeEnabled(isChecked));
+        switchSheetAppBhim.setChecked(storage.isBhimEnabled());
+        switchSheetAppBhim.setOnCheckedChangeListener((b, isChecked) -> storage.setBhimEnabled(isChecked));
 
-        switchAppPaytm.setChecked(storage.isPaytmEnabled());
-        switchAppPaytm.setOnCheckedChangeListener((b, isChecked) -> storage.setPaytmEnabled(isChecked));
-
-        switchAppBhim.setChecked(storage.isBhimEnabled());
-        switchAppBhim.setOnCheckedChangeListener((b, isChecked) -> storage.setBhimEnabled(isChecked));
-
-        switchAppBankSms.setChecked(storage.isBankSmsEnabled());
-        switchAppBankSms.setOnCheckedChangeListener((b, isChecked) -> {
+        switchSheetAppBankSms.setChecked(storage.isBankSmsEnabled());
+        switchSheetAppBankSms.setOnCheckedChangeListener((b, isChecked) -> {
             storage.setBankSmsEnabled(isChecked);
             if (isChecked && ContextCompat.checkSelfPermission(this, Manifest.permission.RECEIVE_SMS) != PackageManager.PERMISSION_GRANTED) {
                 requestSmsPermission();
             }
             updateStatusCard();
         });
+
+        sheetDialog.show();
     }
 
     private void requestSmsPermission() {
@@ -363,7 +367,6 @@ public class MainActivity extends AppCompatActivity {
                 Toast.makeText(this, "Voice command listening active! Say 'Hey Raj, Repeat'", Toast.LENGTH_LONG).show();
                 if (voiceCommandManager != null && storage.isSoundBoxEnabled()) voiceCommandManager.setEnabled(true);
             } else {
-                switchVoiceCommand.setChecked(false);
                 storage.setHandsFreeVoiceEnabled(false);
                 Toast.makeText(this, "Microphone permission needed for 'Hey Raj' voice command", Toast.LENGTH_SHORT).show();
             }
