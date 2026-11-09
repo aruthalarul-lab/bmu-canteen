@@ -1,5 +1,6 @@
 package com.bmucanteen.soundbox;
 
+import android.graphics.Color;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -26,25 +27,6 @@ public class PaymentHistoryAdapter extends RecyclerView.Adapter<PaymentHistoryAd
         notifyDataSetChanged();
     }
 
-    private String formatDateTime(long timestamp) {
-        Calendar recordCal = Calendar.getInstance();
-        recordCal.setTimeInMillis(timestamp);
-
-        Calendar todayCal = Calendar.getInstance();
-        if (recordCal.get(Calendar.YEAR) == todayCal.get(Calendar.YEAR) &&
-            recordCal.get(Calendar.DAY_OF_YEAR) == todayCal.get(Calendar.DAY_OF_YEAR)) {
-            return "Today, " + timeFormat.format(new Date(timestamp));
-        }
-
-        todayCal.add(Calendar.DAY_OF_YEAR, -1);
-        if (recordCal.get(Calendar.YEAR) == todayCal.get(Calendar.YEAR) &&
-            recordCal.get(Calendar.DAY_OF_YEAR) == todayCal.get(Calendar.DAY_OF_YEAR)) {
-            return "Yesterday, " + timeFormat.format(new Date(timestamp));
-        }
-
-        return dateFormat.format(new Date(timestamp));
-    }
-
     @NonNull
     @Override
     public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
@@ -56,24 +38,38 @@ public class PaymentHistoryAdapter extends RecyclerView.Adapter<PaymentHistoryAd
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         PaymentRecord record = list.get(position);
         
-        String app = record.getAppName();
-        String badge = "UPI";
-        if (app.toLowerCase().contains("google")) badge = "GPay";
-        else if (app.toLowerCase().contains("phonepe")) badge = "PhPe";
-        else if (app.toLowerCase().contains("paytm")) badge = "Paytm";
-        else if (app.toLowerCase().contains("bhim")) badge = "BHIM";
-        else if (app.toLowerCase().contains("bank") || app.toLowerCase().contains("sbi") || app.toLowerCase().contains("hdfc") || app.toLowerCase().contains("icici") || app.toLowerCase().contains("axis")) badge = "Bank";
-
-        holder.tvAppBadge.setText(badge);
-        
         String payer = record.getPayerName();
         if (payer == null || payer.trim().isEmpty()) {
             payer = "UPI Customer";
         }
         holder.tvPayer.setText(payer);
 
-        String timeStr = formatDateTime(record.getTimestamp());
-        holder.tvTime.setText(timeStr + " • " + record.getAppName());
+        String app = record.getAppName();
+        holder.tvApp.setText("• " + app);
+
+        long timestamp = record.getTimestamp();
+        Calendar recordCal = Calendar.getInstance();
+        recordCal.setTimeInMillis(timestamp);
+
+        Calendar todayCal = Calendar.getInstance();
+        boolean isToday = recordCal.get(Calendar.YEAR) == todayCal.get(Calendar.YEAR) &&
+                          recordCal.get(Calendar.DAY_OF_YEAR) == todayCal.get(Calendar.DAY_OF_YEAR);
+
+        todayCal.add(Calendar.DAY_OF_YEAR, -1);
+        boolean isYesterday = recordCal.get(Calendar.YEAR) == todayCal.get(Calendar.YEAR) &&
+                              recordCal.get(Calendar.DAY_OF_YEAR) == todayCal.get(Calendar.DAY_OF_YEAR);
+
+        if (isToday) {
+            holder.tvTime.setText("Today, " + timeFormat.format(new Date(timestamp)));
+            holder.tvTime.setTextColor(Color.parseColor("#059669")); // Green for today
+        } else if (isYesterday) {
+            // Show actual date in blue color for yesterday
+            holder.tvTime.setText(dateFormat.format(new Date(timestamp)));
+            holder.tvTime.setTextColor(Color.parseColor("#2563EB")); // Blue for yesterday
+        } else {
+            holder.tvTime.setText(dateFormat.format(new Date(timestamp)));
+            holder.tvTime.setTextColor(Color.parseColor("#64748B")); // Subtle slate for older
+        }
 
         holder.tvAmount.setText("+₹" + record.getAmount());
     }
@@ -84,12 +80,12 @@ public class PaymentHistoryAdapter extends RecyclerView.Adapter<PaymentHistoryAd
     }
 
     static class ViewHolder extends RecyclerView.ViewHolder {
-        TextView tvAppBadge, tvPayer, tvTime, tvAmount;
+        TextView tvPayer, tvApp, tvTime, tvAmount;
 
         ViewHolder(View itemView) {
             super(itemView);
-            tvAppBadge = itemView.findViewById(R.id.tvAppBadge);
             tvPayer = itemView.findViewById(R.id.tvPayer);
+            tvApp = itemView.findViewById(R.id.tvApp);
             tvTime = itemView.findViewById(R.id.tvTime);
             tvAmount = itemView.findViewById(R.id.tvAmount);
         }

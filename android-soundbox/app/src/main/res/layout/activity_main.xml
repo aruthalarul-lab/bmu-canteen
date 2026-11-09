@@ -255,35 +255,34 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Action Button: Repeat Last Payment -->
+            <!-- Action Button: Repeat Last Payment (Vibrant Colored) -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnRepeatLast"
                 android:layout_width="match_parent"
                 android:layout_height="52dp"
                 android:layout_marginBottom="16dp"
-                android:text="🔁 Repeat Last Payment  (or say &quot;Hey Raj, Repeat&quot;)"
-                android:textSize="13sp"
+                android:text="🔁 Repeat Last Payment  (or &quot;Hey Raj, Repeat&quot;)"
+                android:textSize="14sp"
                 android:textStyle="bold"
                 android:textAllCaps="false"
                 app:cornerRadius="14dp"
-                app:strokeColor="@color/primary"
-                app:strokeWidth="1.5dp"
-                android:textColor="@color/primary"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
+                android:backgroundTint="#4F46E5"
+                android:textColor="#FFFFFF"
+                app:elevation="2dp" />
 
-            <!-- History Section -->
+            <!-- History Section (Single Clean Line) -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:layout_marginBottom="8dp">
+                android:layout_marginBottom="10dp">
 
                 <TextView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="@string/recent_payments"
+                    android:text="Recent Payments"
                     android:textSize="15sp"
                     android:textStyle="bold"
                     android:textColor="@color/text_main" />
@@ -292,12 +291,12 @@
                     android:id="@+id/btnSyncSms"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="📥 Sync Yesterday's SMS"
+                    android:text="📥 Sync Past SMS"
                     android:textSize="12sp"
                     android:textStyle="bold"
                     android:textColor="#2563EB"
                     android:padding="6dp"
-                    android:layout_marginEnd="8dp" />
+                    android:layout_marginEnd="6dp" />
 
                 <TextView
                     android:id="@+id/btnClearHistory"
@@ -305,7 +304,7 @@
                     android:layout_height="wrap_content"
                     android:text="Clear"
                     android:textSize="12sp"
-                    android:textColor="@color/primary"
+                    android:textColor="@color/text_muted"
                     android:padding="4dp" />
             </LinearLayout>
 

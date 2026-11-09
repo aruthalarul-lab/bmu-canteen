@@ -4,8 +4,8 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginBottom="8dp"
-    app:cardCornerRadius="14dp"
+    android:layout_marginBottom="6dp"
+    app:cardCornerRadius="12dp"
     app:cardElevation="1dp"
     app:strokeColor="@color/divider"
     app:strokeWidth="1dp"
@@ -15,53 +15,70 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:padding="14dp"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp"
+        android:paddingTop="11dp"
+        android:paddingBottom="11dp"
         android:gravity="center_vertical">
 
-        <TextView
-            android:id="@+id/tvAppBadge"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:background="@drawable/badge_bg"
-            android:gravity="center"
-            android:text="UPI"
-            android:textSize="11sp"
-            android:textStyle="bold"
-            android:textColor="#FFFFFF" />
-
+        <!-- Payer + Time + App Info in clean, uncluttered layout -->
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:layout_marginStart="12dp"
             android:orientation="vertical">
 
-            <TextView
-                android:id="@+id/tvPayer"
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Rahul Sharma"
-                android:textSize="14sp"
-                android:textStyle="bold"
-                android:textColor="@color/text_main" />
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:id="@+id/tvPayer"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Rahul Sharma"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_main"
+                    android:maxLines="1"
+                    android:ellipsize="end" />
+
+                <TextView
+                    android:id="@+id/tvApp"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:text="• SBI"
+                    android:textSize="12sp"
+                    android:textColor="@color/text_muted"
+                    android:maxLines="1"
+                    android:ellipsize="end" />
+            </LinearLayout>
 
             <TextView
                 android:id="@+id/tvTime"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="10:45 AM • Google Pay"
-                android:textSize="11sp"
-                android:textColor="@color/text_muted" />
+                android:layout_marginTop="2dp"
+                android:text="08 Nov, 04:30 PM"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:textColor="#2563EB"
+                android:maxLines="1" />
         </LinearLayout>
 
+        <!-- Right: Amount -->
         <TextView
             android:id="@+id/tvAmount"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="+₹150"
+            android:text="+₹150.00"
             android:textSize="16sp"
             android:textStyle="bold"
-            android:textColor="@color/success_green" />
+            android:textColor="@color/success_green"
+            android:layout_marginStart="8dp" />
 
     </LinearLayout>
 
