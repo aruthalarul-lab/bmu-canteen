@@ -39,15 +39,16 @@ public class MainActivity extends AppCompatActivity {
     private static final int REQ_SMS_PERMISSION = 203;
 
     private MaterialCardView cardStatus;
-    private TextView tvStatusTitle, tvStatusDesc, tvEmptyHistory, btnClearHistory, btnSyncSms;
-    private MaterialButton btnPermission, btnTestVoice, btnRepeatLast;
+    private TextView tvStatusTitle, tvStatusDesc, tvEmptyHistory, btnClearHistory, btnSyncSms, btnPreviewVoice;
+    private MaterialButton btnPermission, btnRepeatLast;
     private SwitchMaterial switchMasterSoundbox;
     
     // LCD Display Screen Views
     private TextView tvMainLcdStatus, tvMainLcdAmount, tvMainLcdPayerApp, tvMainLcdTime, btnMainLcdPopOut;
 
-    private RadioGroup rgLanguage;
+    private RadioGroup rgLanguage, rgFemaleVoice;
     private RadioButton rbEnglishTamil, rbEnglish, rbTamil, rbHindi, rbHinglish, rbTelugu;
+    private RadioButton rbFemaleNatural, rbFemaleCrisp, rbFemaleSoft, rbVoiceDefault;
     private SwitchMaterial switchVoiceCommand, switchWaveRepeat, switchFloatingLcd;
     private SwitchMaterial switchRepeat, switchIncludePayer, switchVolumeBoost;
 
@@ -89,12 +90,9 @@ public class MainActivity extends AppCompatActivity {
         proximitySensorManager = new ProximitySensorManager(this);
 
         btnPermission.setOnClickListener(v -> openNotificationAccessSettings());
-        btnTestVoice.setOnClickListener(v -> {
-            Toast.makeText(this, "Testing voice announcement & LCD...", Toast.LENGTH_SHORT).show();
-            SoundBoxSpeaker.getInstance(this).speakTest("100");
-            PaymentRecord testRec = new PaymentRecord("test", "100", "Rahul Sharma", "Google Pay", System.currentTimeMillis());
-            updateLcdDisplay(testRec);
-            FloatingLcdService.showLcd(this, "100", "Rahul Sharma", "Google Pay");
+        btnPreviewVoice.setOnClickListener(v -> {
+            Toast.makeText(this, "Playing Tamil female voice sample...", Toast.LENGTH_SHORT).show();
+            SoundBoxSpeaker.getInstance(this).previewTamilVoice();
         });
 
         btnRepeatLast.setOnClickListener(v -> {
@@ -134,7 +132,6 @@ public class MainActivity extends AppCompatActivity {
         tvStatusTitle = findViewById(R.id.tvStatusTitle);
         tvStatusDesc = findViewById(R.id.tvStatusDesc);
         btnPermission = findViewById(R.id.btnPermission);
-        btnTestVoice = findViewById(R.id.btnTestVoice);
         btnRepeatLast = findViewById(R.id.btnRepeatLast);
         switchMasterSoundbox = findViewById(R.id.switchMasterSoundbox);
 
@@ -152,6 +149,14 @@ public class MainActivity extends AppCompatActivity {
         rbHindi = findViewById(R.id.rbHindi);
         rbHinglish = findViewById(R.id.rbHinglish);
         rbTelugu = findViewById(R.id.rbTelugu);
+
+        // Tamil Female Voice Controls
+        btnPreviewVoice = findViewById(R.id.btnPreviewVoice);
+        rgFemaleVoice = findViewById(R.id.rgFemaleVoice);
+        rbFemaleNatural = findViewById(R.id.rbFemaleNatural);
+        rbFemaleCrisp = findViewById(R.id.rbFemaleCrisp);
+        rbFemaleSoft = findViewById(R.id.rbFemaleSoft);
+        rbVoiceDefault = findViewById(R.id.rbVoiceDefault);
 
         switchVoiceCommand = findViewById(R.id.switchVoiceCommand);
         switchWaveRepeat = findViewById(R.id.switchWaveRepeat);
@@ -255,6 +260,24 @@ public class MainActivity extends AppCompatActivity {
 
             storage.setLanguage(selected);
             SoundBoxSpeaker.getInstance(this).setLanguage(selected);
+        });
+
+        // Tamil Female Voice Setup
+        String voiceProfile = storage.getVoiceProfile();
+        if ("female_crisp".equals(voiceProfile)) rbFemaleCrisp.setChecked(true);
+        else if ("female_soft".equals(voiceProfile)) rbFemaleSoft.setChecked(true);
+        else if ("default".equals(voiceProfile)) rbVoiceDefault.setChecked(true);
+        else rbFemaleNatural.setChecked(true);
+
+        rgFemaleVoice.setOnCheckedChangeListener((group, checkedId) -> {
+            String selected = "female_natural";
+            if (checkedId == R.id.rbFemaleCrisp) selected = "female_crisp";
+            else if (checkedId == R.id.rbFemaleSoft) selected = "female_soft";
+            else if (checkedId == R.id.rbVoiceDefault) selected = "default";
+
+            storage.setVoiceProfile(selected);
+            Toast.makeText(this, "Voice updated! Playing preview...", Toast.LENGTH_SHORT).show();
+            SoundBoxSpeaker.getInstance(this).previewTamilVoice();
         });
 
         // Hands-Free Voice Listener switch

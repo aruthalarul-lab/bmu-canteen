@@ -7,8 +7,10 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.speech.tts.TextToSpeech;
+import android.speech.tts.Voice;
 import android.util.Log;
 import java.util.Locale;
+import java.util.Set;
 
 public class SoundBoxSpeaker {
     private static final String TAG = "SoundBoxSpeaker";
@@ -167,8 +169,74 @@ public class SoundBoxSpeaker {
         }
     }
 
-    public void speakTest(String amount) {
-        speakPayment(amount, "Rahul Sharma", "Google Pay");
+    public void previewTamilVoice() {
+        if (!isTtsReady) {
+            initTts();
+            new Handler(Looper.getMainLooper()).postDelayed(this::previewTamilVoice, 500);
+            return;
+        }
+        boostVolume();
+        Locale tamilLocale = new Locale("ta", "IN");
+        int check = tts != null ? tts.isLanguageAvailable(tamilLocale) : TextToSpeech.LANG_NOT_SUPPORTED;
+        if (check >= TextToSpeech.LANG_AVAILABLE) {
+            executeSpeech("நூற்று ஐம்பது ரூபாய் பெறப்பட்டது.", tamilLocale);
+        } else {
+            executeSpeech("Noottru aimbadhu roobai petrappattadhu.", Locale.US);
+        }
+    }
+
+    private void applyVoiceProfileForLocale(Locale locale) {
+        if (tts == null) return;
+        String profile = storage.getVoiceProfile();
+
+        float pitch = 1.18f;
+        float rate = 0.90f;
+
+        if ("female_crisp".equals(profile)) {
+            pitch = 1.30f;
+            rate = 0.93f;
+        } else if ("female_soft".equals(profile)) {
+            pitch = 1.06f;
+            rate = 0.88f;
+        } else if ("default".equals(profile)) {
+            pitch = 1.00f;
+            rate = 0.95f;
+        }
+
+        tts.setPitch(pitch);
+        tts.setSpeechRate(rate);
+
+        // On Android 5.0+ (API 21+), look for high quality female voice for the target language
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && !"default".equals(profile)) {
+            try {
+                Set<Voice> voices = tts.getVoices();
+                if (voices != null && locale != null) {
+                    Voice bestVoice = null;
+                    String targetLang = locale.getLanguage().toLowerCase();
+
+                    for (Voice v : voices) {
+                        if (v.getLocale() != null && targetLang.equalsIgnoreCase(v.getLocale().getLanguage())) {
+                            String vName = v.getName().toLowerCase();
+                            // Google Tamil neural female voice names usually contain 'taf', 'tac', or 'female'
+                            boolean matchesFemale = vName.contains("female") || 
+                                                   vName.contains("taf") || 
+                                                   vName.contains("tac") || 
+                                                   vName.contains("cce") || 
+                                                   vName.contains("end") || 
+                                                   (!vName.contains("male") && v.getQuality() >= Voice.QUALITY_VERY_HIGH);
+
+                            if (matchesFemale) {
+                                bestVoice = v;
+                                break;
+                            }
+                        }
+                    }
+                    if (bestVoice != null) {
+                        tts.setVoice(bestVoice);
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
     }
 
     private void executeSpeech(String message, Locale locale) {
@@ -178,8 +246,7 @@ public class SoundBoxSpeaker {
                 tts.setLanguage(locale);
             } catch (Exception ignored) {}
         }
-        tts.setSpeechRate(0.95f);
-        tts.setPitch(1.0f);
+        applyVoiceProfileForLocale(locale);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             tts.speak(message, TextToSpeech.QUEUE_ADD, null, "SoundBoxUtterance_" + System.currentTimeMillis());

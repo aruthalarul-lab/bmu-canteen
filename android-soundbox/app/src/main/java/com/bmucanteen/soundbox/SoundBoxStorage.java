@@ -21,6 +21,7 @@ public class SoundBoxStorage {
     private static final String KEY_ENABLE_BANK_SMS = "enable_bank_sms";
 
     private static final String KEY_LANGUAGE = "language";
+    private static final String KEY_VOICE_PROFILE = "voice_profile";
     private static final String KEY_REPEAT = "repeat_twice";
     private static final String KEY_INCLUDE_PAYER = "include_payer";
     private static final String KEY_VOLUME_BOOST = "volume_boost";
@@ -92,6 +93,14 @@ public class SoundBoxStorage {
 
     public void setLanguage(String lang) {
         prefs.edit().putString(KEY_LANGUAGE, lang).apply();
+    }
+
+    public String getVoiceProfile() {
+        return prefs.getString(KEY_VOICE_PROFILE, "female_natural"); // Default to natural female
+    }
+
+    public void setVoiceProfile(String profile) {
+        prefs.edit().putString(KEY_VOICE_PROFILE, profile).apply();
     }
 
     public boolean isRepeatTwice() {

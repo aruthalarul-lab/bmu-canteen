@@ -252,42 +252,21 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Action Buttons Row (Test Voice + Repeat Last Payment) -->
-            <LinearLayout
+            <!-- Action Button: Repeat Last Payment -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnRepeatLast"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:layout_marginBottom="14dp">
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnTestVoice"
-                    android:layout_width="0dp"
-                    android:layout_height="52dp"
-                    android:layout_weight="1"
-                    android:layout_marginEnd="6dp"
-                    android:text="🔊 Test Alert"
-                    android:textSize="13sp"
-                    android:textStyle="bold"
-                    android:textAllCaps="false"
-                    app:cornerRadius="14dp"
-                    android:backgroundTint="@color/primary" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnRepeatLast"
-                    android:layout_width="0dp"
-                    android:layout_height="52dp"
-                    android:layout_weight="1"
-                    android:layout_marginStart="6dp"
-                    android:text="🔁 Repeat Last"
-                    android:textSize="13sp"
-                    android:textStyle="bold"
-                    android:textAllCaps="false"
-                    app:cornerRadius="14dp"
-                    app:strokeColor="@color/primary"
-                    app:strokeWidth="1.5dp"
-                    android:textColor="@color/primary"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
-            </LinearLayout>
+                android:layout_height="52dp"
+                android:layout_marginBottom="14dp"
+                android:text="🔁 Repeat Last Payment  (or say &quot;Hey Raj, Repeat&quot;)"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:textAllCaps="false"
+                app:cornerRadius="14dp"
+                app:strokeColor="@color/primary"
+                app:strokeWidth="1.5dp"
+                android:textColor="@color/primary"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
 
             <!-- Hands-Free Voice & Gesture Card -->
             <com.google.android.material.card.MaterialCardView
@@ -466,6 +445,79 @@
                             android:layout_height="wrap_content"
                             android:text="Telugu (Google Pay lo 100 roopaayilu vachhaayi)"
                             android:textSize="13sp" />
+                    </RadioGroup>
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:background="@color/divider"
+                        android:layout_marginTop="12dp"
+                        android:layout_marginBottom="10dp" />
+
+                    <!-- Tamil Female Voice Selector -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginBottom="4dp">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Tamil Female Voice (பெண் குரல்)"
+                            android:textSize="12sp"
+                            android:textStyle="bold"
+                            android:textColor="@color/text_main" />
+
+                        <TextView
+                            android:id="@+id/btnPreviewVoice"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🔊 Hear Voice"
+                            android:textSize="11sp"
+                            android:textStyle="bold"
+                            android:textColor="#2563EB"
+                            android:padding="4dp" />
+                    </LinearLayout>
+
+                    <RadioGroup
+                        android:id="@+id/rgFemaleVoice"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:layout_marginTop="2dp"
+                        android:layout_marginBottom="4dp">
+
+                        <RadioButton
+                            android:id="@+id/rbFemaleNatural"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="👩 Natural Female (தெளிவான தமிழ் பெண் குரல் - Recommended)"
+                            android:textStyle="bold"
+                            android:textSize="12sp" />
+
+                        <RadioButton
+                            android:id="@+id/rbFemaleCrisp"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="📢 Crisp &amp; Loud Female (உரத்த பெண் குரல் - Best for Canteen)"
+                            android:textSize="12sp" />
+
+                        <RadioButton
+                            android:id="@+id/rbFemaleSoft"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🌸 Soft &amp; Calm Female (மென்மையான பெண் குரல்)"
+                            android:textSize="12sp" />
+
+                        <RadioButton
+                            android:id="@+id/rbVoiceDefault"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="⚙️ Phone Default Voice (போன் இயல்பு குரல்)"
+                            android:textSize="12sp" />
                     </RadioGroup>
 
                     <View
