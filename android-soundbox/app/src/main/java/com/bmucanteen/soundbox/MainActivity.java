@@ -36,6 +36,7 @@ public class MainActivity extends AppCompatActivity {
 
     private static final int REQ_RECORD_AUDIO = 201;
     private static final int REQ_OVERLAY_PERMISSION = 202;
+    private static final int REQ_SMS_PERMISSION = 203;
 
     private MaterialCardView cardStatus;
     private TextView tvStatusTitle, tvStatusDesc, tvEmptyHistory, btnClearHistory;
@@ -119,6 +120,11 @@ public class MainActivity extends AppCompatActivity {
 
         // Initialize LCD Screen with last payment or ready state
         updateLcdDisplay(storage.getLastPayment());
+
+        // Check and prompt SMS permission if needed for real-time bank SMS alerts
+        if (storage.isBankSmsEnabled() && ContextCompat.checkSelfPermission(this, Manifest.permission.RECEIVE_SMS) != PackageManager.PERMISSION_GRANTED) {
+            requestSmsPermission();
+        }
     }
 
     private void initViews() {
@@ -299,7 +305,20 @@ public class MainActivity extends AppCompatActivity {
         switchAppBhim.setOnCheckedChangeListener((b, isChecked) -> storage.setBhimEnabled(isChecked));
 
         switchAppBankSms.setChecked(storage.isBankSmsEnabled());
-        switchAppBankSms.setOnCheckedChangeListener((b, isChecked) -> storage.setBankSmsEnabled(isChecked));
+        switchAppBankSms.setOnCheckedChangeListener((b, isChecked) -> {
+            storage.setBankSmsEnabled(isChecked);
+            if (isChecked && ContextCompat.checkSelfPermission(this, Manifest.permission.RECEIVE_SMS) != PackageManager.PERMISSION_GRANTED) {
+                requestSmsPermission();
+            }
+            updateStatusCard();
+        });
+    }
+
+    private void requestSmsPermission() {
+        ActivityCompat.requestPermissions(this, new String[]{
+            Manifest.permission.RECEIVE_SMS,
+            Manifest.permission.READ_SMS
+        }, REQ_SMS_PERMISSION);
     }
 
     private void checkAndRequestAudioPermission() {
@@ -322,6 +341,13 @@ public class MainActivity extends AppCompatActivity {
                 storage.setHandsFreeVoiceEnabled(false);
                 Toast.makeText(this, "Microphone permission needed for 'Hey Raj' voice command", Toast.LENGTH_SHORT).show();
             }
+        } else if (requestCode == REQ_SMS_PERMISSION) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                Toast.makeText(this, "Real-time Bank SMS Alerts Active! 📩✅", Toast.LENGTH_LONG).show();
+            } else {
+                Toast.makeText(this, "SMS permission denied. Bank SMS alerts may not trigger.", Toast.LENGTH_LONG).show();
+            }
+            updateStatusCard();
         }
     }
 
@@ -361,6 +387,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void updateStatusCard() {
         boolean notifGranted = isNotificationServiceEnabled();
+        boolean smsGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED;
         boolean soundboxEnabled = storage.isSoundBoxEnabled();
 
         if (!soundboxEnabled) {
@@ -376,26 +403,38 @@ public class MainActivity extends AppCompatActivity {
 
         btnPermission.setVisibility(View.VISIBLE);
 
-        if (notifGranted) {
+        if (!notifGranted) {
+            // Notification Permission Needed
+            cardStatus.setCardBackgroundColor(Color.parseColor("#FFFBEB"));
+            cardStatus.setStrokeColor(Color.parseColor("#F59E0B"));
+            tvStatusTitle.setText(R.string.status_inactive);
+            tvStatusTitle.setTextColor(Color.parseColor("#92400E"));
+            tvStatusDesc.setText("Notification access is needed to detect Google Pay, PhonePe & Paytm alerts.");
+            btnPermission.setText(R.string.grant_permission);
+            btnPermission.setEnabled(true);
+            btnPermission.setBackgroundColor(Color.parseColor("#EA580C"));
+            btnPermission.setOnClickListener(v -> openNotificationAccessSettings());
+        } else if (!smsGranted && storage.isBankSmsEnabled()) {
+            // SMS Permission Needed for Bank SMS
+            cardStatus.setCardBackgroundColor(Color.parseColor("#FFFBEB"));
+            cardStatus.setStrokeColor(Color.parseColor("#3B82F6"));
+            tvStatusTitle.setText("SMS Permission Needed 📩");
+            tvStatusTitle.setTextColor(Color.parseColor("#1D4ED8"));
+            tvStatusDesc.setText("SMS permission is required to read real-time bank credit alerts (SBI, HDFC, ICICI, etc.).");
+            btnPermission.setText("Grant SMS Permission 📩");
+            btnPermission.setEnabled(true);
+            btnPermission.setBackgroundColor(Color.parseColor("#2563EB"));
+            btnPermission.setOnClickListener(v -> requestSmsPermission());
+        } else {
             // Active & Listening State
             cardStatus.setCardBackgroundColor(Color.parseColor("#ECFDF5"));
             cardStatus.setStrokeColor(Color.parseColor("#10B981"));
             tvStatusTitle.setText(R.string.status_active);
             tvStatusTitle.setTextColor(Color.parseColor("#065F46"));
             tvStatusDesc.setText(R.string.desc_active);
-            btnPermission.setText("Access Active ✅");
+            btnPermission.setText("All Access Active ✅");
             btnPermission.setEnabled(false);
             btnPermission.setBackgroundColor(Color.parseColor("#10B981"));
-        } else {
-            // Permission Needed State
-            cardStatus.setCardBackgroundColor(Color.parseColor("#FFFBEB"));
-            cardStatus.setStrokeColor(Color.parseColor("#F59E0B"));
-            tvStatusTitle.setText(R.string.status_inactive);
-            tvStatusTitle.setTextColor(Color.parseColor("#92400E"));
-            tvStatusDesc.setText(R.string.desc_inactive);
-            btnPermission.setText(R.string.grant_permission);
-            btnPermission.setEnabled(true);
-            btnPermission.setBackgroundColor(Color.parseColor("#EA580C"));
         }
     }
 

@@ -72,7 +72,8 @@ public class UpiNotificationListenerService extends NotificationListenerService 
         if ("Bank Account".equals(appName) && !storage.isBankSmsEnabled()) return;
 
         // Check if message is a received/credit notification
-        if (!isCreditMessage(fullMessage)) {
+        boolean isCredit = isCreditMessage(fullMessage) || SmsParser.isCreditMessage(fullMessage);
+        if (!isCredit) {
             Log.d(TAG, "Ignored non-credit notification: " + fullMessage);
             return;
         }
@@ -80,12 +81,31 @@ public class UpiNotificationListenerService extends NotificationListenerService 
         // Extract amount
         String amount = extractAmount(fullMessage);
         if (amount == null || amount.isEmpty() || amount.equals("0")) {
+            amount = SmsParser.extractAmount(fullMessage);
+        }
+        if (amount == null || amount.isEmpty() || amount.equals("0")) {
             Log.d(TAG, "No valid amount found in: " + fullMessage);
             return;
         }
 
         // Extract payer name
         String payerName = extractPayerName(title, fullMessage);
+        if (payerName.isEmpty()) {
+            payerName = SmsParser.extractPayerName(fullMessage);
+        }
+
+        if (isSmsApp) {
+            String detectedBank = SmsParser.extractBankName(title, fullMessage);
+            if (!detectedBank.equals("Bank SMS")) {
+                appName = detectedBank;
+            }
+        }
+
+        // Deduplicate: avoid double-announcing within 4 seconds if SmsReceiver also processed it
+        if (storage.isRecentDuplicate(amount, 4000)) {
+            Log.d(TAG, "Ignoring duplicate notification within 4s window: " + amount);
+            return;
+        }
 
         Log.i(TAG, "Valid UPI payment detected! Amount: ₹" + amount + ", Payer: " + payerName + ", App: " + appName);
 

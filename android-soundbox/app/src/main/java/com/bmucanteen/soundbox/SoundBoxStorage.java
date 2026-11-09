@@ -142,6 +142,13 @@ public class SoundBoxStorage {
         prefs.edit().putBoolean(KEY_FLOATING_LCD, enabled).apply();
     }
 
+    public synchronized boolean isRecentDuplicate(String amount, long windowMs) {
+        PaymentRecord last = getLastPayment();
+        if (last == null || last.getAmount() == null) return false;
+        long elapsed = System.currentTimeMillis() - last.getTimestamp();
+        return elapsed < windowMs && last.getAmount().equals(amount);
+    }
+
     public synchronized void addPayment(PaymentRecord record) {
         saveLastPayment(record);
 
